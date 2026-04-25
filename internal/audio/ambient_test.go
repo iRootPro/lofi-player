@@ -3,6 +3,7 @@ package audio
 import (
 	"crypto/sha256"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -133,5 +134,54 @@ func TestMixerOverwritesIfHashMismatch(t *testing.T) {
 	}
 	if sha256.Sum256(got) == sha256.Sum256(bogus) {
 		t.Errorf("file still has bogus content: %q", got)
+	}
+}
+
+func TestMixerSpawnsMpvSubprocesses(t *testing.T) {
+	if _, err := exec.LookPath("mpv"); err != nil {
+		t.Skip("mpv not installed")
+	}
+	withCacheDir(t, t.TempDir())
+
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	for _, id := range m.ChannelIDs() {
+		if m.Disabled(id) {
+			t.Errorf("channel %s unexpectedly disabled", id)
+		}
+	}
+}
+
+func TestMixerCloseTerminatesSubprocesses(t *testing.T) {
+	if _, err := exec.LookPath("mpv"); err != nil {
+		t.Skip("mpv not installed")
+	}
+	withCacheDir(t, t.TempDir())
+
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := m.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := m.Close(); err != nil {
+		t.Errorf("second Close: %v", err)
+	}
+}
+
+func TestMixerDisabledForUnknownID(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+	if m.Disabled("does-not-exist") {
+		t.Error("Disabled(unknown) returned true; expected false (treat unknown as not-disabled)")
 	}
 }

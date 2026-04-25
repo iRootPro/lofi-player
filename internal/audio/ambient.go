@@ -2,6 +2,7 @@ package audio
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"embed"
 	"errors"
@@ -9,6 +10,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 //go:embed ambient_assets/*.opus
@@ -31,11 +34,15 @@ var ambientChannels = []AmbientChannel{
 type runtimeChannel struct {
 	meta     AmbientChannel
 	filePath string
+	player   *ambientPlayer
+	disabled bool
 }
 
 type AmbientMixer struct {
 	channels []AmbientChannel
 	runtime  []*runtimeChannel
+	closed   bool
+	mu       sync.Mutex
 }
 
 // cacheDirFn lets tests redirect the cache root because os.UserCacheDir
@@ -86,12 +93,53 @@ func (m *AmbientMixer) Init() error {
 		if err != nil {
 			return fmt.Errorf("materialize %s: %w", c.ID, err)
 		}
-		m.runtime[i] = &runtimeChannel{meta: c, filePath: path}
+		rc := &runtimeChannel{meta: c, filePath: path}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		p, err := newAmbientPlayer(ctx, path)
+		cancel()
+		if err != nil {
+			rc.disabled = true
+		} else {
+			rc.player = p
+		}
+		m.runtime[i] = rc
 	}
 	return nil
 }
 
-func (m *AmbientMixer) Close() error { return nil }
+func (m *AmbientMixer) Close() error {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.closed = true
+	rt := m.runtime
+	m.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, rc := range rt {
+		if rc == nil || rc.player == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(p *ambientPlayer) {
+			defer wg.Done()
+			p.close()
+		}(rc.player)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (m *AmbientMixer) Disabled(id string) bool {
+	for _, rc := range m.runtime {
+		if rc != nil && rc.meta.ID == id {
+			return rc.disabled
+		}
+	}
+	return false
+}
 
 func (m *AmbientMixer) cacheDir() (string, error) {
 	return cacheDirFn()
