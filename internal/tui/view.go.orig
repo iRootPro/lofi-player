@@ -28,8 +28,6 @@ const (
 	iconLogo     = "" //  music
 	iconVolume   = "" //  volume-up
 	iconStations = "" //  list
-	iconKindYouTube = "" //  youtube
-	iconKindStream  = "" //  rss (always-on stream)
 )
 
 const (
@@ -336,9 +334,6 @@ func (m Model) renderStations() string {
 		// inter-block gap itself, so trailing \n stacks with the gap
 		// and inflates the spacing.
 		line := leftPad + cursor + marker + " " + name
-		if icon := m.stationKindIcon(s); icon != "" {
-			line += "  " + icon
-		}
 		if i < len(m.cfg.Stations)-1 {
 			line += "\n"
 		}
