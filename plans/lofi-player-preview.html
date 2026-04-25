@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>lofi-player — визуальный референс</title>
+<style>
+  :root {
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.5rem;
+    background: #0d0e14;
+    color: #c0caf5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 500;
+    margin: 0 0 0.5rem;
+    color: #c0caf5;
+  }
+  p.lede {
+    color: #565f89;
+    margin: 0 0 2rem;
+  }
+  .terminal-frame {
+    background: #1f2030;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .terminal-chrome {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+  }
+  .dot.red    { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green  { background: #27c93f; }
+  .terminal-path {
+    margin-left: auto;
+    font-size: 11px;
+    color: #565f89;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  }
+  pre.terminal {
+    background: #1a1b26;
+    color: #c0caf5;
+    padding: 1.5rem 1.75rem;
+    border-radius: 8px;
+    font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0;
+    overflow-x: auto;
+  }
+  /* Tokyo Night palette as semantic classes */
+  .muted     { color: #565f89; }
+  .subtle    { color: #414868; }
+  .primary   { color: #bb9af7; font-weight: 600; }
+  .secondary { color: #7aa2f7; font-weight: 600; }
+  .accent    { color: #f7768e; }
+  .accent-b  { color: #f7768e; font-weight: 600; }
+  .success   { color: #9ece6a; }
+  .warning   { color: #e0af68; }
+  .info      { color: #7dcfff; }
+  .fg        { color: #c0caf5; }
+
+  .legend {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #1f2030;
+  }
+  .legend h2 {
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0 0 1rem;
+  }
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+  }
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #1f2030;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .swatch .chip {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .swatch .role { color: #c0caf5; }
+  .swatch .hex {
+    margin-left: auto;
+    color: #565f89;
+    font-family: "SF Mono", monospace;
+    font-size: 12px;
+  }
+  .mode-label {
+    font-size: 13px;
+    color: #565f89;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>lofi-player — визуальный референс</h1>
+  <p class="lede">Tokyo Night-палитра, full mode (Phase 3+ с активным pomodoro). Используй как ориентир при реализации.</p>
+
+  <div class="terminal-frame">
+    <div class="terminal-chrome">
+      <div class="dot red"></div>
+      <div class="dot yellow"></div>
+      <div class="dot green"></div>
+      <div class="terminal-path">~/dev/lofi-player</div>
+    </div>
+    <pre class="terminal"><span class="muted">╭─</span> <span class="accent">♪</span> <span class="primary">lofi.player</span> <span class="muted">─────────────────────────────────────</span> <span class="info">14:32</span> <span class="muted">─╮</span>
+<span class="muted">│</span>                                                            <span class="muted">│</span>
+<span class="muted">│</span>  <span class="secondary">Chillhop Radio</span>  <span class="muted">·</span> <span class="success">live</span>                                  <span class="muted">│</span>
+<span class="muted">│</span>  <span class="accent">♪</span> <span class="fg">Snowflakes</span>  <span class="muted">—</span>  <span class="warning">Hippie Sabotage</span>                      <span class="muted">│</span>
+<span class="muted">│</span>                                                            <span class="muted">│</span>
+<span class="muted">│</span>  <span class="success">▰▰▰▰▰▰▰▰</span><span class="subtle">▱▱▱▱▱▱▱▱▱▱▱▱</span>  <span class="info">2:14</span> <span class="muted">/</span> <span class="muted">4:38</span>                <span class="muted">│</span>
+<span class="muted">│</span>  <span class="muted">VOL</span>  <span class="primary">▰▰▰▰▰▰</span><span class="subtle">▱▱▱▱</span>  <span class="info">60%</span>                              <span class="muted">│</span>
+<span class="muted">│</span>                                                            <span class="muted">│</span>
+<span class="muted">│</span>  <span class="muted">─── stations ───</span>      <span class="muted">─── pomodoro ───</span>                <span class="muted">│</span>
+<span class="muted">│</span>  <span class="accent-b">›</span> <span class="accent-b">Lofi Girl</span>          <span class="muted">focus</span>    <span class="success">17:42</span>               <span class="muted">│</span>
+<span class="muted">│</span>    <span class="fg">Chillhop Radio</span>     <span class="muted">round</span>    <span class="fg">2 / 4</span>               <span class="muted">│</span>
+<span class="muted">│</span>    <span class="fg">Box of Cats</span>                                          <span class="muted">│</span>
+<span class="muted">│</span>    <span class="fg">SomaFM Groove</span>      <span class="muted">─── today ───</span>                   <span class="muted">│</span>
+<span class="muted">│</span>    <span class="fg">Drone Zone</span>         <span class="muted">listened</span>  <span class="fg">2h 14m</span>              <span class="muted">│</span>
+<span class="muted">│</span>    <span class="fg">Calmradio Sleep</span>    <span class="muted">streak</span>    <span class="success">▰▰▰▰▰</span><span class="subtle">▱</span>              <span class="muted">│</span>
+<span class="muted">│</span>                                                            <span class="muted">│</span>
+<span class="muted">│</span>    <span class="muted">+ add station</span>                                         <span class="muted">│</span>
+<span class="muted">│</span>                                                            <span class="muted">│</span>
+<span class="muted">├────────────────────────────────────────────────────────────┤</span>
+<span class="muted">│</span>  <span class="warning">space</span> <span class="muted">play</span>  <span class="muted">·</span>  <span class="warning">j/k</span> <span class="muted">nav</span>  <span class="muted">·</span>  <span class="warning">v</span> <span class="muted">vol</span>  <span class="muted">·</span>  <span class="warning">p</span> <span class="muted">pomo</span>  <span class="muted">·</span>  <span class="warning">?</span> <span class="muted">help</span>      <span class="muted">│</span>
+<span class="muted">╰────────────────────────────────────────────────────────────╯</span></pre>
+  </div>
+
+  <div class="terminal-frame">
+    <div class="mode-label">Mini mode — по нажатию <code>m</code></div>
+    <pre class="terminal"><span class="accent">♪</span> <span class="primary">lofi.player</span>                              <span class="info">14:32</span>
+<span class="secondary">Chillhop Radio</span>  <span class="muted">·</span> <span class="success">live</span>
+<span class="accent">♪</span> <span class="fg">Snowflakes</span> <span class="muted">—</span> <span class="warning">Hippie Sabotage</span>
+<span class="success">▰▰▰▰▰▰▰▰</span><span class="subtle">▱▱▱▱▱▱▱▱</span>  <span class="info">2:14 / 4:38</span>
+<span class="muted">VOL</span> <span class="primary">▰▰▰▰▰▰</span><span class="subtle">▱▱▱▱</span>  <span class="info">60%</span>
+<span class="warning">space</span> <span class="muted">play</span>  <span class="muted">·</span>  <span class="warning">m</span> <span class="muted">full</span>  <span class="muted">·</span>  <span class="warning">q</span> <span class="muted">quit</span></pre>
+  </div>
+
+  <div class="terminal-frame">
+    <div class="mode-label">Nano mode (statusline) — <code>lofi-player --statusline</code></div>
+    <pre class="terminal"><span class="accent">♪</span> <span class="secondary">Lofi Girl</span> <span class="muted">·</span> <span class="fg">Snowflakes</span> <span class="muted">—</span> <span class="warning">Hippie Sabotage</span>  <span class="success">▰▰▰▰</span><span class="subtle">▱▱</span>  <span class="info">60%</span></pre>
+  </div>
+
+  <div class="legend">
+    <h2>Палитра — Tokyo Night</h2>
+    <div class="swatches">
+      <div class="swatch"><div class="chip" style="background:#1a1b26"></div><span class="role">Background</span><span class="hex">#1a1b26</span></div>
+      <div class="swatch"><div class="chip" style="background:#c0caf5"></div><span class="role">Foreground</span><span class="hex">#c0caf5</span></div>
+      <div class="swatch"><div class="chip" style="background:#565f89"></div><span class="role">Muted</span><span class="hex">#565f89</span></div>
+      <div class="swatch"><div class="chip" style="background:#414868"></div><span class="role">Subtle</span><span class="hex">#414868</span></div>
+      <div class="swatch"><div class="chip" style="background:#bb9af7"></div><span class="role">Primary</span><span class="hex">#bb9af7</span></div>
+      <div class="swatch"><div class="chip" style="background:#7aa2f7"></div><span class="role">Secondary</span><span class="hex">#7aa2f7</span></div>
+      <div class="swatch"><div class="chip" style="background:#f7768e"></div><span class="role">Accent</span><span class="hex">#f7768e</span></div>
+      <div class="swatch"><div class="chip" style="background:#9ece6a"></div><span class="role">Success</span><span class="hex">#9ece6a</span></div>
+      <div class="swatch"><div class="chip" style="background:#e0af68"></div><span class="role">Warning</span><span class="hex">#e0af68</span></div>
+      <div class="swatch"><div class="chip" style="background:#7dcfff"></div><span class="role">Info</span><span class="hex">#7dcfff</span></div>
+    </div>
+  </div>
+
+</main>
+</body>
+</html>
