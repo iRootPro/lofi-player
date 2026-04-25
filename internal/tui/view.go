@@ -25,7 +25,7 @@ const (
 // the trade-off is documented in the README.
 const (
 	iconLogo     = "" //  music
-	iconVolume   = "" //  volume-up (with sound waves)
+	iconVolume   = "" //  broadcast-tower (bigger, with waves)
 	iconStations = "" //  list
 )
 
