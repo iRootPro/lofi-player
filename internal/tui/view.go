@@ -64,7 +64,7 @@ func (m Model) View() string {
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Subtle).
+		BorderForeground(m.theme.Muted).
 		Padding(1, 0).
 		Render(content)
 }
@@ -130,39 +130,28 @@ func (m Model) renderHeader() string {
 	return leftPad + title + strings.Repeat(" ", gap) + clock
 }
 
-// renderNowPlaying wraps the station + track block in a rounded card.
-// The card is the screen's primary focus element — everything else
-// (volume, stations list) sits visually below it without competing
-// borders.
+// renderNowPlaying renders the station + track block as plain text.
+// The outer app border (in View()) is the only rounded container on
+// screen — making the now-playing block its own card too created a
+// noisy double-border. Visual hierarchy now comes from typography
+// (bold station name) and the status glyph (●/◯/spinner).
 func (m Model) renderNowPlaying() string {
 	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
 		return leftPad + m.styles.Hint.Render("— no station selected —")
 	}
 
-	cardWidth := m.width - len(leftPad)*2
-	if cardWidth > nowPlayingMaxWidth {
-		cardWidth = nowPlayingMaxWidth
+	innerWidth := m.width - len(leftPad)*2
+	if innerWidth > nowPlayingMaxWidth {
+		innerWidth = nowPlayingMaxWidth
 	}
-	if cardWidth < 24 {
-		cardWidth = 24
+	if innerWidth < 24 {
+		innerWidth = 24
 	}
-	// Inside the card: 1 char of horizontal padding on each side leaves
-	// (cardWidth - 2 borders - 2 padding) for content.
-	innerWidth := cardWidth - 4
 
 	name := m.cfg.Stations[m.playingIdx].Name
-	stationLine := m.statusBlock() + "  " + m.styles.StationName.Render(name)
-	trackLine := m.formatTrack(innerWidth)
-	inner := stationLine + "\n" + trackLine
-
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Muted).
-		Padding(0, 1).
-		Width(cardWidth).
-		MarginLeft(len(leftPad)).
-		Render(inner)
-	return card
+	stationLine := leftPad + m.statusBlock() + "  " + m.styles.StationName.Render(name)
+	trackLine := leftPad + m.formatTrack(innerWidth)
+	return stationLine + "\n" + trackLine
 }
 
 // statusBlock returns the leading status indicator for the now-playing
