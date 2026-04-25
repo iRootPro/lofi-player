@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/pomodoro"
 	"github.com/iRootPro/lofi-player/internal/state"
 	"github.com/iRootPro/lofi-player/internal/tui"
 )
@@ -50,10 +52,12 @@ func run() error {
 	}
 
 	st := state.Load()
+	stats := decodeStats(st.Pomodoro)
 	opts := tui.Options{
 		Theme:           st.Theme,
 		Volume:          st.Volume,
 		AutoplayStation: stationIndex(cfg.Stations, st.LastStationName),
+		Stats:           stats,
 	}
 	effectiveVolume := cfg.Volume
 	if opts.Volume > 0 {
@@ -83,7 +87,7 @@ func run() error {
 			Theme:           m.ThemeName(),
 			Volume:          m.Volume(),
 			LastStationName: m.LastStationName(),
-			Pomodoro:        st.Pomodoro,
+			Pomodoro:        encodeStats(m.Stats()),
 		}
 		if err := state.Save(next); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: state save failed: %v\n", err)
@@ -128,4 +132,29 @@ func stationIndex(stations []config.Station, name string) int {
 		}
 	}
 	return -1
+}
+
+// decodeStats unpacks the Pomodoro RawMessage into a Stats struct.
+// Failures yield a zero-value Stats — never the cause of a startup
+// abort (state load is best-effort).
+func decodeStats(raw json.RawMessage) pomodoro.Stats {
+	if len(raw) == 0 {
+		return pomodoro.Stats{}
+	}
+	var s pomodoro.Stats
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return pomodoro.Stats{}
+	}
+	return s
+}
+
+// encodeStats marshals Stats into the RawMessage form held by
+// state.State.Pomodoro. Unmarshalable values fall back to nil so the
+// state file simply omits the key.
+func encodeStats(s pomodoro.Stats) json.RawMessage {
+	data, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	return data
 }
