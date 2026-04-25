@@ -73,6 +73,8 @@ func (m Model) View() string {
 		content = inner.viewMini()
 	case modeAddStation:
 		content = inner.viewAddStation()
+	case modeMixer:
+		content = inner.viewMixer()
 	default:
 		content = inner.viewFull()
 	}
@@ -95,6 +97,19 @@ func (m Model) View() string {
 	)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, framed)
+}
+
+// viewMixer overlays the ambient-mixer modal on top of whichever layout
+// was active when `x` was pressed, so the user keeps visual context.
+func (m Model) viewMixer() string {
+	var backdrop string
+	if m.modePrev == modeMini {
+		backdrop = m.viewMini()
+	} else {
+		backdrop = m.viewFull()
+	}
+	card := m.mixerUI.view(m.width, m.styles, m.theme)
+	return backdrop + "\n\n" + card
 }
 
 // viewAddStation overlays the add-station modal on top of whichever

@@ -1,6 +1,14 @@
 package tui
 
-import "github.com/iRootPro/lofi-player/internal/audio"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/iRootPro/lofi-player/internal/audio"
+	"github.com/iRootPro/lofi-player/internal/theme"
+)
 
 // mixerModel is the modal's transient UI state. The single source of
 // truth for volumes is audio.AmbientMixer; mixerModel only knows which
@@ -77,4 +85,74 @@ func (m mixerModel) set(v int) {
 		return
 	}
 	_ = m.mixer.SetVolume(id, v)
+}
+
+const mixerBarWidth = 14
+
+func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
+	if m.mixer == nil {
+		return ""
+	}
+	var inner strings.Builder
+	inner.WriteString(styles.SectionHeader.Render("─── ambient mixer ───"))
+	inner.WriteString("\n\n")
+
+	ids := m.mixer.ChannelIDs()
+	for i, id := range ids {
+		ch, _ := m.mixer.Channel(id)
+		v := m.mixer.Volume(id)
+		disabled := m.mixer.Disabled(id)
+		selected := i == m.selected
+		inner.WriteString(m.renderRow(ch, v, disabled, selected, styles))
+		if i < len(ids)-1 {
+			inner.WriteString("\n\n")
+		}
+	}
+	inner.WriteString("\n\n")
+	inner.WriteString(m.renderHint(styles))
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(t.Muted).
+		Padding(1, 3).
+		Render(inner.String())
+
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, card)
+}
+
+func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected bool, styles Styles) string {
+	cursor := "  "
+	if selected {
+		cursor = styles.Cursor.Render("> ")
+	}
+	label := fmt.Sprintf("%-12s", ch.Label)
+
+	if disabled {
+		return cursor + ch.Icon + "  " + styles.Hint.Render(label) + styles.Hint.Render("unavailable")
+	}
+
+	fill := v * mixerBarWidth / 100
+	bar := styles.VolFill.Render(strings.Repeat("▰", fill)) +
+		styles.VolEmpty.Render(strings.Repeat("▱", mixerBarWidth-fill))
+	value := fmt.Sprintf("%3d", v)
+
+	switch {
+	case selected:
+		return cursor + ch.Icon + "  " + styles.Cursor.Render(label) + bar + "  " + styles.Cursor.Render(value)
+	case v == 0:
+		return cursor + ch.Icon + "  " + styles.Hint.Render(label) + bar + "  " + styles.Hint.Render(value)
+	default:
+		return cursor + ch.Icon + "  " + styles.StationItem.Render(label) + bar + "  " + styles.StationItem.Render(value)
+	}
+}
+
+func (m mixerModel) renderHint(styles Styles) string {
+	pair := func(k, d string) string {
+		return styles.HelpKey.Render(k) + " " + styles.HelpDesc.Render(d)
+	}
+	sep := "  " + styles.HelpSep.Render("·") + "  "
+	return pair("j/k", "select") + sep +
+		pair("h/l", "±5") + sep +
+		pair("0", "mute") + sep +
+		pair("x", "close")
 }
