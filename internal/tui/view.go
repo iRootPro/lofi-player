@@ -25,7 +25,7 @@ const (
 // the trade-off is documented in the README.
 const (
 	iconLogo     = "" //  music
-	iconVolume   = "" //  broadcast-tower (bigger, with waves)
+	iconVolume   = "🔊" // 🔊 unicode speaker emoji (no Nerd Font dep)
 	iconStations = "" //  list
 )
 
