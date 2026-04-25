@@ -51,6 +51,10 @@ func run() error {
 		return fmt.Errorf("mpv not found on $PATH; install with `brew install mpv` (macOS) or `apt install mpv` (Debian/Ubuntu)")
 	}
 
+	if err := preflightYouTube(cfg.Stations); err != nil {
+		return err
+	}
+
 	st := state.Load()
 	stats := decodeStats(st.Pomodoro)
 	opts := tui.Options{
@@ -116,6 +120,27 @@ func runStatusline() error {
 	}
 
 	fmt.Println(tui.StatusLine(themeName, st.LastStationName, fmt.Sprintf("%d%%", volume), volume))
+	return nil
+}
+
+// preflightYouTube verifies yt-dlp is on $PATH whenever the config
+// contains at least one YouTube-kind station. Hard-fails with a clear
+// install hint so the user isn't left guessing why YouTube playback
+// produces a generic "stream load failed" toast at runtime.
+func preflightYouTube(stations []config.Station) error {
+	var youtubeNames []string
+	for _, s := range stations {
+		if s.IsYouTube() {
+			youtubeNames = append(youtubeNames, s.Name)
+		}
+	}
+	if len(youtubeNames) == 0 {
+		return nil
+	}
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		return fmt.Errorf("yt-dlp not found on $PATH but config has %d YouTube station(s) (%v); install with `brew install yt-dlp` (macOS) or `pip install yt-dlp`",
+			len(youtubeNames), youtubeNames)
+	}
 	return nil
 }
 

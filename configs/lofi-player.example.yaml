@@ -24,6 +24,13 @@ stations:
   - name: Radio Paradise Mellow
     url: https://stream.radioparadise.com/mellow-128
 
+  # YouTube stations route through mpv's ytdl_hook; you need yt-dlp on
+  # $PATH (brew install yt-dlp / pip install yt-dlp). The well-known
+  # 24/7 Lofi Girl stream is a good starting point — uncomment to use:
+  # - name: Lofi Girl 24/7
+  #   url: https://www.youtube.com/watch?v=jfKfPfyJRdk
+  #   kind: youtube
+
 # Pomodoro focus-timer (Phase 3+). Press `p` in the TUI to start/stop.
 pomodoro:
   # Focus block length, in minutes.

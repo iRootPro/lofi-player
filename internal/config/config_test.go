@@ -176,6 +176,78 @@ pomodoro:
 	}
 }
 
+func TestStationKind(t *testing.T) {
+	tests := []struct {
+		station   Station
+		wantKind  string
+		wantYTube bool
+	}{
+		{Station{}, KindStream, false},
+		{Station{Kind: ""}, KindStream, false},
+		{Station{Kind: "stream"}, KindStream, false},
+		{Station{Kind: "youtube"}, KindYouTube, true},
+		// Unknown kinds aren't rejected here — they pass through and the
+		// audio engine will surface whatever error mpv produces.
+		{Station{Kind: "magnet"}, "magnet", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.station.Kind, func(t *testing.T) {
+			if got := tc.station.EffectiveKind(); got != tc.wantKind {
+				t.Errorf("EffectiveKind() = %q, want %q", got, tc.wantKind)
+			}
+			if got := tc.station.IsYouTube(); got != tc.wantYTube {
+				t.Errorf("IsYouTube() = %v, want %v", got, tc.wantYTube)
+			}
+		})
+	}
+}
+
+func TestLoadFromFile_KindDefaultsToStreamForExistingConfigs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	// Mirrors a Phase 0-3 config with no Kind field per station.
+	body := []byte(`
+theme: tokyo-night
+volume: 60
+stations:
+  - name: SomaFM
+    url: https://ice1.somafm.com/groovesalad-256-mp3
+`)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Stations[0].EffectiveKind(); got != KindStream {
+		t.Errorf("legacy station EffectiveKind() = %q, want %q", got, KindStream)
+	}
+}
+
+func TestLoadFromFile_YouTubeKindParses(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	body := []byte(`
+theme: tokyo-night
+volume: 60
+stations:
+  - name: Lofi Girl
+    url: https://www.youtube.com/watch?v=jfKfPfyJRdk
+    kind: youtube
+`)
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Stations[0].IsYouTube() {
+		t.Errorf("station IsYouTube() = false, want true")
+	}
+}
+
 func TestLoadFromFile_NullPomodoroFallsBackToDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

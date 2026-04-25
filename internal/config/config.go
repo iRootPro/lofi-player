@@ -36,8 +36,36 @@ type Config struct {
 type Station struct {
 	// Name is the display name shown in the station list.
 	Name string `yaml:"name"`
-	// URL is the stream URL passed to the audio engine.
+	// URL is the stream URL passed to the audio engine. For
+	// Kind=="youtube", any URL mpv's ytdl_hook can resolve works (full
+	// video URLs, channel live URLs, etc).
 	URL string `yaml:"url"`
+	// Kind selects the playback path. The empty string and "stream"
+	// behave identically — a direct Icecast/Shoutcast/HTTP stream URL
+	// passed to mpv as-is. "youtube" routes through mpv's ytdl_hook,
+	// which requires yt-dlp on $PATH (validated at startup).
+	Kind string `yaml:"kind,omitempty"`
+}
+
+// Recognized Station.Kind values.
+const (
+	KindStream  = "stream"
+	KindYouTube = "youtube"
+)
+
+// EffectiveKind returns the Station kind with the empty-string default
+// resolved to KindStream.
+func (s Station) EffectiveKind() string {
+	if s.Kind == "" {
+		return KindStream
+	}
+	return s.Kind
+}
+
+// IsYouTube is true when the station should be played through mpv's
+// ytdl_hook.
+func (s Station) IsYouTube() bool {
+	return s.EffectiveKind() == KindYouTube
 }
 
 // PomodoroConfig mirrors the YAML keys described in plan §6 Phase 3.

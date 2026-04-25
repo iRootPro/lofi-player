@@ -4,19 +4,22 @@ A compact, polished TUI player for lofi / chillhop / ambient internet
 radio. Built for focused work — keyboard-driven, Tokyo-Night by default,
 designed to live happily in a tmux pane.
 
-> **Status: Phase 3 (Pomodoro).** Real audio through `mpv`; switchable
+> **Status: Phase 4a (YouTube).** Real audio through `mpv`; switchable
 > themes (`t`); compact mini mode (`m`); state survives restarts;
-> `--statusline` for tmux; first-class focus timer (`p`) with native
-> notifications, configurable durations, music auto-pause/resume on
-> phase transitions, and listened-time + streak stats persisted across
-> sessions. Phase 4 (YouTube source, local files, ambient mixer, MPRIS,
-> Discord) is up next — see
+> `--statusline` for tmux; pomodoro timer (`p`) with native
+> notifications and persisted stats; YouTube live streams and videos
+> via mpv's ytdl_hook (Lofi Girl 24/7 etc.). Remaining Phase 4 power
+> features (local files, ambient mixer, MPRIS, Discord) and Phase 5
+> distribution still ahead — see
 > [`plans/lofi-player-plan.md`](plans/lofi-player-plan.md).
 
 ## Requirements
 
 - Go **1.26** or newer (build only)
 - `mpv` on `$PATH` (`brew install mpv` / `apt install mpv`)
+- `yt-dlp` on `$PATH` (`brew install yt-dlp` / `pip install yt-dlp`) —
+  only if your config has YouTube-kind stations; the app refuses to
+  start with a clear hint if it's missing
 - A terminal that handles 256 colors and Unicode block characters
 
 ## Build & run
@@ -78,7 +81,16 @@ volume: 60
 stations:
   - name: SomaFM Groove Salad
     url: https://ice1.somafm.com/groovesalad-256-mp3
+
+  # YouTube (any URL mpv's ytdl_hook accepts — videos, live streams, etc.):
+  - name: Lofi Girl 24/7
+    url: https://www.youtube.com/watch?v=jfKfPfyJRdk
+    kind: youtube
 ```
+
+Station `kind` defaults to `stream` (a direct HTTP/Icecast URL passed
+to mpv as-is). Set it to `youtube` to route through mpv's ytdl_hook
+(requires `yt-dlp` on `$PATH`).
 
 Available themes: `tokyo-night` (default), `catppuccin-mocha`,
 `gruvbox-dark`, `rose-pine`. Cycle live with `t`.
