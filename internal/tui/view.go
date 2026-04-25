@@ -79,7 +79,7 @@ func (m Model) viewFull() string {
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 	b.WriteString(m.renderMainArea())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelpOrToast())
@@ -107,7 +107,7 @@ func (m Model) renderMainArea() string {
 		}
 		return lipgloss.JoinHorizontal(lipgloss.Top, stations, "    ", right)
 	case m.stats.ListenedToday > 0 || m.stats.Streak > 0:
-		return stations + "\n\n" + m.renderTodayCompact()
+		return stations + "\n" + m.renderTodayCompact()
 	default:
 		return stations
 	}
@@ -372,7 +372,7 @@ func (m Model) renderVolume() string {
 func (m Model) renderStations() string {
 	var b strings.Builder
 	b.WriteString(leftPad + m.styles.SectionHeader.Render(iconStations+"  stations"))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
 	if len(m.cfg.Stations) == 0 {
 		// Indent matches the station-name column (leftPad + 4-cell prefix).
@@ -380,6 +380,7 @@ func (m Model) renderStations() string {
 			m.styles.StationCursor.Render("press a") + " " +
 			m.styles.Hint.Render("to add one"))
 		b.WriteString("\n")
+		return b.String()
 	}
 
 	for i, s := range m.cfg.Stations {
@@ -412,12 +413,15 @@ func (m Model) renderStations() string {
 			name = m.styles.StationItem.Render(s.Name)
 		}
 
-		b.WriteString(leftPad + cursor + marker + " " + name + "\n")
+		// Drop the trailing newline on the last row — viewFull adds the
+		// inter-block gap itself, so trailing \n stacks with the gap
+		// and inflates the spacing.
+		line := leftPad + cursor + marker + " " + name
+		if i < len(m.cfg.Stations)-1 {
+			line += "\n"
+		}
+		b.WriteString(line)
 	}
-
-	// Tight gap between the last station and "+ add station" — the
-	// affordance reads as part of the list rather than a stranded line.
-	b.WriteString(leftPad + "    " + m.styles.AddStation.Render("+ add station"))
 	return b.String()
 }
 

@@ -25,7 +25,6 @@ type Styles struct {
 	StationItem    lipgloss.Style
 	StationCursor  lipgloss.Style
 	StationPlaying lipgloss.Style
-	AddStation     lipgloss.Style
 	HelpKey        lipgloss.Style
 	HelpDesc       lipgloss.Style
 	HelpSep        lipgloss.Style
@@ -56,7 +55,6 @@ func NewStyles(t theme.Theme) Styles {
 		StationItem:    lipgloss.NewStyle().Foreground(t.Foreground),
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
 		StationPlaying: lipgloss.NewStyle().Foreground(t.Accent),
-		AddStation:     muted,
 		HelpKey:        lipgloss.NewStyle().Foreground(t.Warning),
 		HelpDesc:       muted,
 		HelpSep:        muted,
