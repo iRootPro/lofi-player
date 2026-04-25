@@ -30,6 +30,10 @@ type Options struct {
 	// AutoplayStation is the index in cfg.Stations to start playing on
 	// startup. -1 (or out-of-range) means no autoplay.
 	AutoplayStation int
+	// SaveAmbient receives a snapshot of channel volumes after the
+	// 500ms debounce window quiets. main.go merges it with the rest
+	// of state.State and writes it atomically.
+	SaveAmbient func(map[string]int)
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -92,6 +96,12 @@ type Model struct {
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel
+
+	// ambientSaveSeq is bumped on every mixer keypress; the matching
+	// ambientSaveTickMsg only fires the save callback when its seq
+	// still equals this value (debounce coalescing).
+	ambientSaveSeq int
+	saveAmbient    func(map[string]int)
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
@@ -141,6 +151,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		autoplayURL: autoplayURL,
 		mixer:       mixer,
 		mixerUI:     newMixerModel(mixer),
+		saveAmbient: opts.SaveAmbient,
 	}
 }
 

@@ -18,6 +18,14 @@ const volumeStep = 5
 // any commands to run. Receiver is by value; never mutate m through a
 // pointer (plan §4.2).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The debounce tick is delivered out-of-band by tea.Tick and must
+	// fire whether or not the user is still inside the mixer modal.
+	if tick, ok := msg.(ambientSaveTickMsg); ok {
+		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
+			m.saveAmbient(m.mixer.Volumes())
+		}
+		return m, nil
+	}
 	// Modal states intercept input first so the form can capture text
 	// without the global keymap stealing characters like 'q'.
 	if m.mode == modeAddStation {
@@ -217,10 +225,20 @@ func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch km.String() {
 	case "esc", "x":
 		m.mode = m.modePrev
-		return m, nil
+		nm, cmd := m.scheduleAmbientSave()
+		return nm, cmd
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	}
 	m.mixerUI = m.mixerUI.handle(km.String())
-	return m, nil
+	nm, cmd := m.scheduleAmbientSave()
+	return nm, cmd
+}
+
+// scheduleAmbientSave bumps the debounce sequence and returns a tick
+// that will fire the save callback after ambientSaveDebounce — unless
+// a newer keypress bumps the seq again first.
+func (m Model) scheduleAmbientSave() (Model, tea.Cmd) {
+	m.ambientSaveSeq++
+	return m, ambientSaveTick(m.ambientSaveSeq)
 }

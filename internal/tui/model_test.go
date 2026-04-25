@@ -286,3 +286,63 @@ func TestGlobalKeysDisabledInMixerModal(t *testing.T) {
 		t.Errorf("global 'a' fired in mixer modal: mode = %v", m.mode)
 	}
 }
+
+func TestAmbientSaveDebounceTickCoalesces(t *testing.T) {
+	saveCalls := 0
+	var lastSnapshot map[string]int
+	cfg := &config.Config{
+		Theme:    "tokyo-night",
+		Volume:   60,
+		Stations: []config.Station{{Name: "A", URL: "http://a"}},
+	}
+
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	m := NewModel(cfg, nil, am, Options{
+		AutoplayStation: -1,
+		SaveAmbient: func(snap map[string]int) {
+			saveCalls++
+			lastSnapshot = snap
+		},
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	// Two volume changes inside the modal.
+	m = send(t, m, "x") // open mixer
+	m = send(t, m, "l") // bump rain to 5
+	m = send(t, m, "l") // bump rain to 10
+
+	// Stale tick (older seq) — must not save.
+	m1, _ := m.Update(ambientSaveTickMsg{seq: 1})
+	m = m1.(Model)
+	if saveCalls != 0 {
+		t.Errorf("stale tick fired save: %d calls, want 0", saveCalls)
+	}
+
+	// Latest tick — should fire one save with current snapshot.
+	m1, _ = m.Update(ambientSaveTickMsg{seq: m.ambientSaveSeq})
+	m = m1.(Model)
+	if saveCalls != 1 {
+		t.Fatalf("save count after fresh tick: got %d, want 1", saveCalls)
+	}
+	if lastSnapshot["rain"] != 10 {
+		t.Errorf("snapshot: got %+v, want rain=10", lastSnapshot)
+	}
+}
+
+func TestAmbientSaveSkippedWhenCallbackNil(t *testing.T) {
+	m := fixture()
+	// fixture() builds NewModel with Options that don't set SaveAmbient.
+	// A tick with no callback should be a quiet no-op.
+	updated, _ := m.Update(ambientSaveTickMsg{seq: 0})
+	if updated == nil {
+		t.Error("Update returned nil model")
+	}
+}
