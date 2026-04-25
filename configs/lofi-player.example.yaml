@@ -1,0 +1,25 @@
+# lofi-player configuration.
+#
+# This file lives at $XDG_CONFIG_HOME/lofi-player/config.yaml
+# (typically ~/.config/lofi-player/config.yaml on Linux and macOS).
+#
+# It is created with these defaults on first run if it doesn't exist.
+
+# Active color theme. Phase 0 only ships tokyo-night;
+# more themes (catppuccin-mocha, gruvbox-dark, rose-pine) arrive in Phase 2.
+theme: tokyo-night
+
+# Initial playback volume, 0–100.
+volume: 60
+
+# Internet-radio stations. Each station needs a display name and a stream URL.
+# In Phase 0 only the URL field is read (audio comes online in Phase 1).
+stations:
+  - name: SomaFM Groove Salad
+    url: https://ice1.somafm.com/groovesalad-256-mp3
+  - name: SomaFM Drone Zone
+    url: https://ice1.somafm.com/dronezone-256-mp3
+  - name: SomaFM Deep Space One
+    url: https://ice1.somafm.com/deepspaceone-128-mp3
+  - name: Radio Paradise Mellow
+    url: https://stream.radioparadise.com/mellow-128

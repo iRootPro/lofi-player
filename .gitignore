@@ -1,0 +1,4 @@
+/lofi-player
+*.test
+*.out
+.DS_Store
