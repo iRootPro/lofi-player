@@ -217,6 +217,41 @@ func TestKeyMapHasMixerOpenX(t *testing.T) {
 	t.Error("MixerOpen does not include 'x'")
 }
 
+func TestStationLineShowsActiveAmbient(t *testing.T) {
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	cfg := &config.Config{
+		Theme:    "tokyo-night",
+		Volume:   60,
+		Stations: []config.Station{{Name: "A", URL: "http://a"}},
+	}
+	m := NewModel(cfg, nil, am, Options{AutoplayStation: -1})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.playingIdx = 0
+	_ = am.SetVolume("rain", 40)
+
+	out := m.renderNowPlaying()
+	if !strings.Contains(out, "🌧️") {
+		t.Errorf("expected rain icon in station line:\n%s", out)
+	}
+}
+
+func TestStationLineHidesIndicatorWhenSilent(t *testing.T) {
+	m := fixture()
+	m.playingIdx = 0
+	out := m.renderNowPlaying()
+	if strings.Contains(out, "🌧️") || strings.Contains(out, "🔥") || strings.Contains(out, "⚪") {
+		t.Errorf("ambient icons leaked to silent station line:\n%s", out)
+	}
+}
+
 func TestGlobalKeysDisabledInMixerModal(t *testing.T) {
 	m := fixture()
 	m = send(t, m, "x") // open mixer

@@ -176,6 +176,9 @@ func (m Model) renderNowPlaying() string {
 	if icon := m.stationKindIcon(station); icon != "" {
 		stationLine += "  " + icon
 	}
+	if indicator := m.renderAmbientIndicator(); indicator != "" {
+		stationLine += "  " + indicator
+	}
 	trackLine := leftPad + m.formatTrack(innerWidth)
 	return stationLine + "\n" + trackLine
 }
@@ -407,3 +410,29 @@ func (m Model) renderFullHelp() string {
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
 }
 
+
+// renderAmbientIndicator returns a compact "· 🌧️🔥" tag composed of
+// active-channel icons in canonical order, separated from the station
+// kind label by a divider in muted tone. Returns empty when no
+// ambient channel is active so the station line stays uncluttered.
+func (m Model) renderAmbientIndicator() string {
+	if m.mixer == nil {
+		return ""
+	}
+	ids := m.mixer.ActiveIDs()
+	if len(ids) == 0 {
+		return ""
+	}
+	var icons []string
+	for _, id := range ids {
+		ch, ok := m.mixer.Channel(id)
+		if !ok {
+			continue
+		}
+		icons = append(icons, ch.Icon)
+	}
+	if len(icons) == 0 {
+		return ""
+	}
+	return m.styles.SectionHeader.Render("· ") + m.styles.AppTitle.Render(strings.Join(icons, ""))
+}
