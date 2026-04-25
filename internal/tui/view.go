@@ -43,10 +43,11 @@ const appFrameWidth = 100
 // WindowSizeMsg arrives so the user never sees a stretched flash on
 // startup (plan §6 pitfall).
 //
-// The whole app is wrapped in an outer rounded border so the layout
-// reads as a contained surface. On wide terminals the frame is
-// centered horizontally at appFrameWidth; on narrower ones it
-// shrinks to fill what's available.
+// The whole app is wrapped in a rounded frame whose top border
+// embeds the brand and the clock (title-on-the-left, label-on-the-
+// right), so the header isn't a separate row inside the frame. On
+// wide terminals the frame is centered horizontally at
+// appFrameWidth; on narrower ones it shrinks to fit.
 func (m Model) View() string {
 	if m.width == 0 {
 		return ""
@@ -61,8 +62,8 @@ func (m Model) View() string {
 	}
 
 	// Clone the model with an adjusted width so children sized off
-	// m.width (header right-align, now-playing track truncation)
-	// fit inside the frame's borders.
+	// m.width (now-playing track truncation, station list) fit
+	// inside the frame's borders.
 	inner := m
 	inner.width = frameWidth - 2
 
@@ -76,12 +77,18 @@ func (m Model) View() string {
 		content = inner.viewFull()
 	}
 
-	framed := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.theme.Muted).
-		Padding(1, 0).
-		Width(frameWidth).
-		Render(content)
+	title := iconLogo + "  lofi.player"
+	rightLabel := time.Now().Format("15:04")
+
+	framed := renderFrame(
+		content,
+		title,
+		rightLabel,
+		frameWidth,
+		lipgloss.NewStyle().Foreground(m.theme.Muted),
+		m.styles.AppTitle,
+		m.styles.Clock,
+	)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, framed)
 }
@@ -103,8 +110,6 @@ func (m Model) viewAddStation() string {
 
 func (m Model) viewFull() string {
 	var b strings.Builder
-	b.WriteString(m.renderHeader())
-	b.WriteString("\n\n")
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
@@ -116,13 +121,11 @@ func (m Model) viewFull() string {
 }
 
 // viewMini renders the compact layout suitable for living in a tmux
-// split corner. Stations list, separator, and full help are dropped;
-// the bogus stream "progress bar" is dropped too — Phase 4b will
-// re-enable it for local files where duration actually exists.
+// split corner. Stations list and full help are dropped — the brand
+// already lives in the frame's top border so no header is needed
+// here either.
 func (m Model) viewMini() string {
 	var b strings.Builder
-	b.WriteString(m.renderHeader())
-	b.WriteString("\n")
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
@@ -134,17 +137,6 @@ func (m Model) viewMini() string {
 		b.WriteString(leftPad + strings.Join(parts, "   "))
 	}
 	return b.String()
-}
-
-func (m Model) renderHeader() string {
-	title := m.styles.AppTitle.Render(iconLogo + "  lofi.player")
-	clock := m.styles.Clock.Render(time.Now().Format("15:04"))
-
-	gap := m.width - len(leftPad)*2 - lipgloss.Width(title) - lipgloss.Width(clock)
-	if gap < 1 {
-		gap = 1
-	}
-	return leftPad + title + strings.Repeat(" ", gap) + clock
 }
 
 // renderNowPlaying renders the station + track block as plain text.
