@@ -28,8 +28,6 @@ const (
 	iconLogo     = "" //  music
 	iconVolume   = "" //  volume-up
 	iconStations = "" //  list
-	iconKindYouTube = "" //  youtube
-	iconKindStream  = "" //  rss (always-on stream)
 )
 
 const (
@@ -170,21 +168,19 @@ func (m Model) renderNowPlaying() string {
 	return stationLine + "\n" + trackLine
 }
 
-// stationKindIcon returns the muted glyph indicating a station's
-// source kind, styled in SectionHeader (Muted) so it sits as a quiet
-// tag next to the station name. Empty string for unknown kinds — the
-// render path then skips the icon rather than showing tofu.
+// stationKindIcon returns a tiny muted "· yt" tag for YouTube-kind
+// stations. Stream (the default) and unknown kinds get no marker —
+// the rule is "tag the exception, not the default", so a list of
+// SomaFM streams stays clean and the rare YouTube entry stands out.
+//
+// Text rather than a Nerd Font glyph: the FA youtube codepoint
+// (U+F167) doesn't render reliably across Nerd Font variants, and a
+// 2-char "yt" is unambiguous on any terminal.
 func (m Model) stationKindIcon(s config.Station) string {
-	var glyph string
-	switch s.EffectiveKind() {
-	case config.KindYouTube:
-		glyph = iconKindYouTube
-	case config.KindStream:
-		glyph = iconKindStream
-	default:
+	if s.EffectiveKind() != config.KindYouTube {
 		return ""
 	}
-	return m.styles.SectionHeader.Render(glyph)
+	return m.styles.SectionHeader.Render("· yt")
 }
 
 // statusBlock returns the leading status indicator for the now-playing
