@@ -22,10 +22,15 @@ import (
 // above and below the content for vertical breathing.
 //
 // borderStyle paints the corners and "─"/"│" segments. titleStyle
-// and rightStyle paint the title and right-label text respectively.
-// lipgloss has no native API for this — corners and side bars are
-// composed manually so the title can interrupt the top border.
-func renderFrame(content, title, rightLabel string, width int, borderStyle, titleStyle, rightStyle lipgloss.Style) string {
+// paints the title text. rightLabel is passed in pre-styled — that
+// way the caller can compose multi-color content (e.g. an icon +
+// fill bar + percent) without renderFrame trying to wrap the whole
+// string in a single foreground color.
+//
+// lipgloss has no native API for title-in-border; corners and side
+// bars are composed manually so the title can interrupt the top
+// border.
+func renderFrame(content, title, rightLabel string, width int, borderStyle, titleStyle lipgloss.Style) string {
 	if width < 8 {
 		width = 8
 	}
@@ -37,7 +42,7 @@ func renderFrame(content, title, rightLabel string, width int, borderStyle, titl
 	}
 	rightSeg := ""
 	if rightLabel != "" {
-		rightSeg = " " + rightStyle.Render(rightLabel) + " "
+		rightSeg = " " + rightLabel + " "
 	}
 
 	// Layout: corner ─ titleSeg filler rightSeg ─ corner.

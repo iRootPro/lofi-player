@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
@@ -26,7 +25,7 @@ const (
 // the trade-off is documented in the README.
 const (
 	iconLogo     = "" //  music
-	iconVolume   = "" //  volume-up
+	iconVolume   = "󰕿" //  volume-high (Material Design)
 	iconStations = "" //  list
 )
 
@@ -80,7 +79,7 @@ func (m Model) View() string {
 	}
 
 	title := iconLogo + "  lofi.player"
-	rightLabel := time.Now().Format("15:04")
+	rightLabel := inner.renderVolume()
 
 	framed := renderFrame(
 		content,
@@ -89,7 +88,6 @@ func (m Model) View() string {
 		frameWidth,
 		lipgloss.NewStyle().Foreground(m.theme.Muted),
 		m.styles.AppTitle,
-		m.styles.Clock,
 	)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, framed)
@@ -113,8 +111,6 @@ func (m Model) viewAddStation() string {
 func (m Model) viewFull() string {
 	var b strings.Builder
 	b.WriteString(m.renderNowPlaying())
-	b.WriteString("\n")
-	b.WriteString(m.renderVolume())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderStations())
 	b.WriteString("\n\n")
@@ -129,8 +125,6 @@ func (m Model) viewFull() string {
 func (m Model) viewMini() string {
 	var b strings.Builder
 	b.WriteString(m.renderNowPlaying())
-	b.WriteString("\n")
-	b.WriteString(m.renderVolume())
 	b.WriteString("\n")
 	if m.toast != nil {
 		b.WriteString(m.renderToast())
@@ -263,6 +257,9 @@ func truncateRunes(s string, maxWidth int) string {
 	return "…"
 }
 
+// renderVolume composes the volume widget — speaker icon, animated
+// fill bar, and percentage. Used as the right-side label embedded in
+// the frame's top border (View() builds the title bar from this).
 func (m Model) renderVolume() string {
 	displayed := m.volumeDisplayed
 	if displayed < 0 {
@@ -280,10 +277,8 @@ func (m Model) renderVolume() string {
 	}
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
-	return leftPad +
-		m.styles.VolLabel.Render(iconVolume+"  ") +
-		bar +
-		"  " +
+	return m.styles.VolLabel.Render(iconVolume) + "  " +
+		bar + "  " +
 		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", m.volume))
 }
 
