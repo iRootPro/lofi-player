@@ -33,24 +33,38 @@ const (
 	statusGlyphPaused = "◯"
 )
 
+// appFrameWidth is the fixed width of the outer rounded border on
+// terminals wide enough for it. Below this threshold the frame
+// shrinks to fit; above it, the frame is centered so the app reads
+// as a contained panel rather than a full-screen TUI.
+const appFrameWidth = 100
+
 // View renders the model. Returns an empty string until the first
 // WindowSizeMsg arrives so the user never sees a stretched flash on
 // startup (plan §6 pitfall).
 //
 // The whole app is wrapped in an outer rounded border so the layout
-// reads as a contained surface. Children render with an adjusted
-// width that accounts for the border (1 cell each side) so headers
-// and the now-playing card still align correctly inside.
+// reads as a contained surface. On wide terminals the frame is
+// centered horizontally at appFrameWidth; on narrower ones it
+// shrinks to fill what's available.
 func (m Model) View() string {
 	if m.width == 0 {
 		return ""
 	}
 
+	frameWidth := appFrameWidth
+	if frameWidth > m.width-2 {
+		frameWidth = m.width - 2
+	}
+	if frameWidth < 40 {
+		frameWidth = 40
+	}
+
 	// Clone the model with an adjusted width so children sized off
-	// m.width (header right-align, now-playing card width) account
-	// for the outer border.
+	// m.width (header right-align, now-playing track truncation)
+	// fit inside the frame's borders.
 	inner := m
-	inner.width = m.width - 2
+	inner.width = frameWidth - 2
 
 	var content string
 	switch m.mode {
@@ -62,11 +76,14 @@ func (m Model) View() string {
 		content = inner.viewFull()
 	}
 
-	return lipgloss.NewStyle().
+	framed := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Muted).
 		Padding(1, 0).
+		Width(frameWidth).
 		Render(content)
+
+	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, framed)
 }
 
 // viewAddStation overlays the add-station modal on top of whichever
