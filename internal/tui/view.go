@@ -36,18 +36,37 @@ const (
 // View renders the model. Returns an empty string until the first
 // WindowSizeMsg arrives so the user never sees a stretched flash on
 // startup (plan §6 pitfall).
+//
+// The whole app is wrapped in an outer rounded border so the layout
+// reads as a contained surface. Children render with an adjusted
+// width that accounts for the border (1 cell each side) so headers
+// and the now-playing card still align correctly inside.
 func (m Model) View() string {
 	if m.width == 0 {
 		return ""
 	}
+
+	// Clone the model with an adjusted width so children sized off
+	// m.width (header right-align, now-playing card width) account
+	// for the outer border.
+	inner := m
+	inner.width = m.width - 2
+
+	var content string
 	switch m.mode {
 	case modeMini:
-		return m.viewMini()
+		content = inner.viewMini()
 	case modeAddStation:
-		return m.viewAddStation()
+		content = inner.viewAddStation()
 	default:
-		return m.viewFull()
+		content = inner.viewFull()
 	}
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Subtle).
+		Padding(1, 0).
+		Render(content)
 }
 
 // viewAddStation overlays the add-station modal on top of whichever
