@@ -99,3 +99,15 @@ func pulseTick() tea.Cmd {
 		return pulseTickMsg{}
 	})
 }
+
+// equalizerInterval controls the decorative equalizer cadence. ~8 Hz
+// is fast enough to feel alive without flicker, and cheap enough to
+// run alongside the existing spinner and pulse ticks.
+const equalizerInterval = 120 * time.Millisecond
+
+// equalizerTick schedules the next equalizerTickMsg.
+func equalizerTick() tea.Cmd {
+	return tea.Tick(equalizerInterval, func(time.Time) tea.Msg {
+		return equalizerTickMsg{}
+	})
+}

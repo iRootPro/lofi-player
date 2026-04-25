@@ -74,6 +74,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pulseTickMsg:
 		m.pulseDim = !m.pulseDim
 		return m, pulseTick()
+
+	case equalizerTickMsg:
+		// Re-arm unconditionally so the chain stays alive across
+		// pause/resume; only advance phases while playing so bars
+		// freeze (rather than crawl) when paused.
+		if m.playing {
+			m.eq.advance()
+		}
+		return m, equalizerTick()
 	}
 	return m, nil
 }

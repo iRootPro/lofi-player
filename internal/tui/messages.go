@@ -34,3 +34,8 @@ type clearToastMsg struct{}
 // pulseTickMsg toggles the live indicator's brightness for a soft
 // "alive" pulse while a station is actively playing.
 type pulseTickMsg struct{}
+
+// equalizerTickMsg drives the decorative equalizer animation. The
+// tick runs globally; the Update handler decides whether to advance
+// the bars (only while playing) before re-arming.
+type equalizerTickMsg struct{}
