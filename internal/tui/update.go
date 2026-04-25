@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -10,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/config"
-	"github.com/iRootPro/lofi-player/internal/pomodoro"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -21,7 +19,7 @@ const volumeStep = 5
 // pointer (plan §4.2).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Modal states intercept input first so the form can capture text
-	// without the global keymap stealing characters like 'q' or 'p'.
+	// without the global keymap stealing characters like 'q'.
 	if m.mode == modeAddStation {
 		return m.updateAddStation(msg)
 	}
@@ -78,9 +76,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickVolAnim()
 
-	case pomodoroTickMsg:
-		return m.handlePomodoroTick(msg.at)
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -133,9 +128,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeFull
 		}
 		return m, nil
-
-	case key.Matches(msg, m.keys.Pomodoro):
-		return m.togglePomodoro()
 
 	case key.Matches(msg, m.keys.AddStation):
 		m.modePrev = m.mode
@@ -195,86 +187,6 @@ func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 		Kind:    ToastSuccess,
 	}
 	return m, clearToastAfter()
-}
-
-// togglePomodoro starts a focus session if idle, otherwise stops the
-// current session.
-func (m Model) togglePomodoro() (tea.Model, tea.Cmd) {
-	now := time.Now()
-	if m.session.Phase == pomodoro.PhaseIdle {
-		next, _ := pomodoro.Start(m.session, now, m.pomoConfig())
-		m.session = next
-		m.stats = pomodoro.RegisterFocusStart(m.stats, now)
-		m.toast = &Toast{Message: "focus session started", Kind: ToastInfo}
-		cmds := []tea.Cmd{
-			clearToastAfter(),
-			notifyCmd("lofi-player", "focus session started"),
-		}
-		if !m.pomoTickActive {
-			m.pomoTickActive = true
-			cmds = append(cmds, pomodoroTick())
-		}
-		return m, tea.Batch(cmds...)
-	}
-
-	next, _ := pomodoro.Stop(m.session)
-	m.session = next
-	m.toast = &Toast{Message: "focus session stopped", Kind: ToastInfo}
-	// Tick will see Idle and stop rescheduling itself.
-	return m, clearToastAfter()
-}
-
-// handlePomodoroTick advances the state machine, fires side effects on
-// transitions, accumulates listened-time, and reschedules itself.
-func (m Model) handlePomodoroTick(at time.Time) (tea.Model, tea.Cmd) {
-	cfg := m.pomoConfig()
-	prevPhase := m.session.Phase
-	next, transition := pomodoro.Tick(m.session, at, cfg)
-	m.session = next
-
-	var cmds []tea.Cmd
-
-	switch transition {
-	case pomodoro.StartedFocus:
-		m.stats = pomodoro.RegisterFocusStart(m.stats, at)
-		if m.cfg.Pomodoro.AutoResumeOnFocus && !m.playing && m.playingIdx >= 0 {
-			m.playing = true
-			cmds = append(cmds, resumeCmd(m.player))
-		}
-		m.toast = &Toast{Message: "focus session", Kind: ToastInfo}
-		cmds = append(cmds, clearToastAfter(),
-			notifyCmd("lofi-player", "back to focus"))
-
-	case pomodoro.StartedShortBreak:
-		if m.cfg.Pomodoro.AutoPauseOnBreak && m.playing {
-			m.playing = false
-			cmds = append(cmds, pauseCmd(m.player))
-		}
-		m.toast = &Toast{Message: "short break", Kind: ToastInfo}
-		cmds = append(cmds, clearToastAfter(),
-			notifyCmd("lofi-player", "take a 5 minute break"))
-
-	case pomodoro.StartedLongBreak:
-		if m.cfg.Pomodoro.AutoPauseOnBreak && m.playing {
-			m.playing = false
-			cmds = append(cmds, pauseCmd(m.player))
-		}
-		m.toast = &Toast{Message: "long break", Kind: ToastInfo}
-		cmds = append(cmds, clearToastAfter(),
-			notifyCmd("lofi-player", "take a 15 minute break"))
-	}
-
-	// Listening time accumulates only during focus + actively playing.
-	if m.session.Phase == pomodoro.PhaseFocus && m.playing && prevPhase == pomodoro.PhaseFocus {
-		m.stats = pomodoro.TickListening(m.stats, at, time.Second)
-	}
-
-	if m.session.Phase != pomodoro.PhaseIdle {
-		cmds = append(cmds, pomodoroTick())
-	} else {
-		m.pomoTickActive = false
-	}
-	return m, tea.Batch(cmds...)
 }
 
 // togglePlayPause is the meat of the space binding. State update is

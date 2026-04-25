@@ -7,21 +7,11 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/iRootPro/lofi-player/internal/pomodoro"
 )
 
 const (
 	leftPad     = "  "
 	volumeWidth = 10
-
-	// twoColMinWidth is the smallest terminal width at which the
-	// stations + pomodoro/today panels appear side by side. Below this
-	// threshold the right column collapses underneath instead.
-	twoColMinWidth = 70
-	// streakBarWidth caps the streak bar at 7 cells so a long streak
-	// doesn't widen the right column unbounded.
-	streakBarWidth = 7
 )
 
 // Nerd Font icons (FontAwesome subset, PUA range U+F000–U+F8FF).
@@ -31,8 +21,6 @@ const (
 	iconLogo     = "" //  music
 	iconVolume   = "" //  volume-up
 	iconStations = "" //  list
-	iconToday    = "" //  clock-o
-	iconPomodoro = "" //  bullseye
 )
 
 const (
@@ -80,142 +68,10 @@ func (m Model) viewFull() string {
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
 	b.WriteString("\n")
-	b.WriteString(m.renderMainArea())
+	b.WriteString(m.renderStations())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelpOrToast())
 	return b.String()
-}
-
-// renderMainArea returns the stations-list block with pomodoro / today
-// side panels arranged for the current session state.
-//
-// Three layout cases:
-//   - active pomodoro session: two-column layout (stations | pomodoro
-//     panel + today panel), or vertically stacked on narrow terminals.
-//     The screen "opens up" when a focus session is running.
-//   - idle session but stats accumulated today: stations full-width,
-//     with a single muted summary line under them ("today · listened
-//     2h 14m · streak ▰▰▱▱▱▱▱"). Avoids the orphan-panel look.
-//   - idle session and no stats: stations only, full-width.
-func (m Model) renderMainArea() string {
-	stations := m.renderStations()
-	switch {
-	case m.session.Phase != pomodoro.PhaseIdle:
-		right := m.renderRightColumn()
-		if m.width < twoColMinWidth {
-			return stations + "\n\n" + right
-		}
-		return lipgloss.JoinHorizontal(lipgloss.Top, stations, "    ", right)
-	case m.stats.ListenedToday > 0 || m.stats.Streak > 0:
-		return stations + "\n" + m.renderTodayCompact()
-	default:
-		return stations
-	}
-}
-
-func (m Model) renderRightColumn() string {
-	var b strings.Builder
-	b.WriteString(m.renderPomodoroBlock())
-	if m.stats.ListenedToday > 0 || m.stats.Streak > 0 {
-		b.WriteString("\n\n")
-		b.WriteString(m.renderTodayBlock())
-	}
-	return b.String()
-}
-
-// renderTodayCompact is the single-line summary shown under the
-// stations list when a pomodoro isn't active but the user has stats
-// for today — gives presence without claiming the right column.
-func (m Model) renderTodayCompact() string {
-	parts := []string{m.styles.SectionHeader.Render(iconToday + "  today")}
-	parts = append(parts,
-		m.styles.StationItem.Render(formatListened(m.stats.ListenedToday))+" "+
-			m.styles.HelpDesc.Render("listened"))
-	if m.stats.Streak > 0 {
-		parts = append(parts,
-			m.styles.StatusLive.Render(fmt.Sprintf("%dd", m.stats.Streak))+" "+
-				m.styles.HelpDesc.Render("streak"))
-	}
-	return leftPad + strings.Join(parts, "   ")
-}
-
-func (m Model) renderPomodoroBlock() string {
-	rem := pomodoro.Remaining(m.session, time.Now())
-	mm := int(rem / time.Minute)
-	ss := int((rem % time.Minute) / time.Second)
-	cycle := m.cfg.Pomodoro.RoundsUntilLongBreak
-	round := m.session.Round + 1
-	if round > cycle && cycle > 0 {
-		round = ((round - 1) % cycle) + 1
-	}
-
-	var b strings.Builder
-	b.WriteString(m.styles.SectionHeader.Render(iconPomodoro + "  pomodoro"))
-	b.WriteString("\n\n")
-	phaseLabel := m.session.Phase.String()
-	timeLabel := fmt.Sprintf("%02d:%02d", mm, ss)
-	b.WriteString(padToWidth(m.styles.HelpDesc.Render(phaseLabel), 10))
-	b.WriteString(m.styles.StatusLive.Render(timeLabel))
-	b.WriteString("\n")
-	b.WriteString(padToWidth(m.styles.HelpDesc.Render("round"), 10))
-	b.WriteString(m.styles.HelpKey.Render(fmt.Sprintf("%d / %d", round, cycle)))
-	return b.String()
-}
-
-func (m Model) renderTodayBlock() string {
-	var b strings.Builder
-	b.WriteString(m.styles.SectionHeader.Render(iconToday + "  today"))
-	b.WriteString("\n\n")
-	b.WriteString(padToWidth(m.styles.HelpDesc.Render("listened"), 10))
-	b.WriteString(m.styles.StationItem.Render(formatListened(m.stats.ListenedToday)))
-	b.WriteString("\n")
-	b.WriteString(padToWidth(m.styles.HelpDesc.Render("streak"), 10))
-	b.WriteString(m.renderStreakBar(m.stats.Streak))
-	return b.String()
-}
-
-func (m Model) renderStreakBar(streak int) string {
-	if streak < 0 {
-		streak = 0
-	}
-	fill := streak
-	if fill > streakBarWidth {
-		fill = streakBarWidth
-	}
-	filled := m.styles.StatusLive.Render(strings.Repeat("▰", fill))
-	empty := m.styles.StreakEmpty.Render(strings.Repeat("▱", streakBarWidth-fill))
-	suffix := ""
-	if streak > streakBarWidth {
-		suffix = " " + m.styles.HelpDesc.Render(fmt.Sprintf("+%d", streak-streakBarWidth))
-	}
-	return filled + empty + suffix
-}
-
-// padToWidth right-pads s with spaces until its visible (non-ANSI)
-// width equals w. Used for column alignment in panels with styled
-// labels — fmt's %-Ns counts ANSI escape bytes toward width and so
-// over-pads (i.e. doesn't pad) styled strings.
-func padToWidth(s string, w int) string {
-	n := w - lipgloss.Width(s)
-	if n <= 0 {
-		return s
-	}
-	return s + strings.Repeat(" ", n)
-}
-
-// formatListened renders a duration as "Xh Ym" / "Ym" / "<1m". Seconds
-// are intentionally dropped — the stat is a daily summary, not a
-// stopwatch.
-func formatListened(d time.Duration) string {
-	if d < time.Minute {
-		return "<1m"
-	}
-	h := int(d / time.Hour)
-	m := int((d % time.Hour) / time.Minute)
-	if h > 0 {
-		return fmt.Sprintf("%dh %dm", h, m)
-	}
-	return fmt.Sprintf("%dm", m)
 }
 
 // viewMini renders the compact layout suitable for living in a tmux

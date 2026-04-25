@@ -33,8 +33,6 @@ type Config struct {
 	Volume int `yaml:"volume"`
 	// Stations is the user's list of internet-radio stations.
 	Stations []Station `yaml:"stations"`
-	// Pomodoro tunes the focus-timer in internal/pomodoro.
-	Pomodoro PomodoroConfig `yaml:"pomodoro"`
 }
 
 // Station is a single internet-radio entry.
@@ -73,29 +71,6 @@ func (s Station) IsYouTube() bool {
 	return s.EffectiveKind() == KindYouTube
 }
 
-// PomodoroConfig mirrors the YAML keys described in plan §6 Phase 3.
-type PomodoroConfig struct {
-	FocusMinutes         int       `yaml:"focus_minutes"`
-	ShortBreakMinutes    int       `yaml:"short_break_minutes"`
-	LongBreakMinutes     int       `yaml:"long_break_minutes"`
-	RoundsUntilLongBreak int       `yaml:"rounds_until_long_break"`
-	AutoPauseOnBreak     bool      `yaml:"auto_pause_on_break"`
-	AutoResumeOnFocus    bool      `yaml:"auto_resume_on_focus"`
-	BreakStations        []Station `yaml:"break_stations"`
-}
-
-// defaultPomodoro returns the canonical pomodoro configuration.
-func defaultPomodoro() PomodoroConfig {
-	return PomodoroConfig{
-		FocusMinutes:         25,
-		ShortBreakMinutes:    5,
-		LongBreakMinutes:     15,
-		RoundsUntilLongBreak: 4,
-		AutoPauseOnBreak:     true,
-		AutoResumeOnFocus:    true,
-	}
-}
-
 // Defaults returns the canonical default configuration written to disk on
 // first run. The station list comes from §6 Phase 0 of the project plan
 // and was chosen for stability across networks and metadata correctness.
@@ -109,7 +84,6 @@ func Defaults() Config {
 			{Name: "SomaFM Deep Space One", URL: "https://ice1.somafm.com/deepspaceone-128-mp3"},
 			{Name: "Radio Paradise Mellow", URL: "https://stream.radioparadise.com/mellow-128"},
 		},
-		Pomodoro: defaultPomodoro(),
 	}
 }
 
@@ -204,29 +178,7 @@ func loadFromFile(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing %q: %w", path, err)
 	}
-	cfg.sanitize()
 	return &cfg, nil
-}
-
-// sanitize replaces invalid (≤0) pomodoro durations with their defaults.
-// This catches the case where a user wrote `pomodoro:` (null) or
-// `pomodoro: {}` and ended up with zeroed numeric fields. Booleans
-// can't be distinguished from "unset" so they keep whatever the
-// unmarshal produced.
-func (c *Config) sanitize() {
-	d := defaultPomodoro()
-	if c.Pomodoro.FocusMinutes <= 0 {
-		c.Pomodoro.FocusMinutes = d.FocusMinutes
-	}
-	if c.Pomodoro.ShortBreakMinutes <= 0 {
-		c.Pomodoro.ShortBreakMinutes = d.ShortBreakMinutes
-	}
-	if c.Pomodoro.LongBreakMinutes <= 0 {
-		c.Pomodoro.LongBreakMinutes = d.LongBreakMinutes
-	}
-	if c.Pomodoro.RoundsUntilLongBreak <= 0 {
-		c.Pomodoro.RoundsUntilLongBreak = d.RoundsUntilLongBreak
-	}
 }
 
 func saveToFile(path string, cfg *Config) error {

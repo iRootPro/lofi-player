@@ -1,7 +1,6 @@
 package state
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -65,24 +64,13 @@ func TestRoundTrip(t *testing.T) {
 		Theme:           "catppuccin-mocha",
 		Volume:          42,
 		LastStationName: "SomaFM Drone Zone",
-		Pomodoro:        json.RawMessage(`{"streak":3}`),
 	}
 	if err := saveToFile(path, original); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	got := loadFromFile(path)
-
-	if got.Theme != original.Theme {
-		t.Errorf("Theme: got %q, want %q", got.Theme, original.Theme)
-	}
-	if got.Volume != original.Volume {
-		t.Errorf("Volume: got %d, want %d", got.Volume, original.Volume)
-	}
-	if got.LastStationName != original.LastStationName {
-		t.Errorf("LastStationName: got %q, want %q", got.LastStationName, original.LastStationName)
-	}
-	if !sameJSON(got.Pomodoro, original.Pomodoro) {
-		t.Errorf("Pomodoro blob mismatch\n got:  %s\n want: %s", got.Pomodoro, original.Pomodoro)
+	if !reflect.DeepEqual(*got, *original) {
+		t.Errorf("round-trip mismatch\n got:  %+v\n want: %+v", *got, *original)
 	}
 }
 
@@ -126,33 +114,3 @@ func TestSave_NilStateRejected(t *testing.T) {
 	}
 }
 
-func TestPomodoroBlobPreserved(t *testing.T) {
-	// Even though Phase 2 doesn't interpret Pomodoro, Save+Load must
-	// preserve its semantic content (Phase 3 will parse it). The
-	// formatting may change because MarshalIndent reformats the bytes,
-	// but the JSON value must still parse to the same structure.
-	dir := t.TempDir()
-	path := filepath.Join(dir, "state.json")
-
-	pomo := json.RawMessage(`{"streak":7,"sessions_today":3}`)
-	if err := saveToFile(path, &State{Pomodoro: pomo}); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-	got := loadFromFile(path)
-	if !sameJSON(got.Pomodoro, pomo) {
-		t.Errorf("Pomodoro blob mismatch\n got:  %s\n want: %s", got.Pomodoro, pomo)
-	}
-}
-
-// sameJSON returns true when a and b decode to equal Go values, ignoring
-// whitespace and key ordering differences.
-func sameJSON(a, b json.RawMessage) bool {
-	var av, bv any
-	if err := json.Unmarshal(a, &av); err != nil {
-		return false
-	}
-	if err := json.Unmarshal(b, &bv); err != nil {
-		return false
-	}
-	return reflect.DeepEqual(av, bv)
-}

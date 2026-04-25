@@ -30,18 +30,3 @@ stations:
   # - name: Lofi Girl 24/7
   #   url: https://www.youtube.com/watch?v=jfKfPfyJRdk
   #   kind: youtube
-
-# Pomodoro focus-timer (Phase 3+). Press `p` in the TUI to start/stop.
-pomodoro:
-  # Focus block length, in minutes.
-  focus_minutes: 25
-  # Short break after every focus block (except the long-break ones).
-  short_break_minutes: 5
-  # Long break after every Nth focus block.
-  long_break_minutes: 15
-  rounds_until_long_break: 4
-  # Pause music when entering a break, resume when re-entering focus.
-  auto_pause_on_break: true
-  auto_resume_on_focus: true
-  # Optional list of stations to play during breaks. Empty = silence.
-  break_stations: []

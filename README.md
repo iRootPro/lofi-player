@@ -6,11 +6,10 @@ designed to live happily in a tmux pane.
 
 > **Status: Phase 4a (YouTube).** Real audio through `mpv`; switchable
 > themes (`t`); compact mini mode (`m`); state survives restarts;
-> `--statusline` for tmux; pomodoro timer (`p`) with native
-> notifications and persisted stats; YouTube live streams and videos
-> via mpv's ytdl_hook (Lofi Girl 24/7 etc.). Remaining Phase 4 power
-> features (local files, ambient mixer, MPRIS, Discord) and Phase 5
-> distribution still ahead — see
+> `--statusline` for tmux; YouTube live streams and videos via mpv's
+> ytdl_hook (Lofi Girl 24/7 etc.); add stations from the TUI (`a`).
+> Remaining Phase 4 power features (local files, ambient mixer, MPRIS,
+> Discord) and Phase 5 distribution still ahead — see
 > [`plans/lofi-player-plan.md`](plans/lofi-player-plan.md).
 
 ## Requirements
@@ -68,7 +67,6 @@ set -g status-right '#(lofi-player --statusline)'
 | `+` / `=`      | Volume up (5%, spring-animated)   |
 | `-` / `_`      | Volume down (5%, spring-animated) |
 | `a`            | Add station (modal form)          |
-| `p`            | Start / stop pomodoro session     |
 | `t`            | Cycle theme                       |
 | `m`            | Toggle mini mode                  |
 | `?`            | Toggle compact / full help card   |
@@ -109,31 +107,11 @@ to mpv as-is). Set it to `youtube` to route through mpv's ytdl_hook
 Available themes: `tokyo-night` (default), `catppuccin-mocha`,
 `gruvbox-dark`, `rose-pine`. Cycle live with `t`.
 
-### Pomodoro
-
-```yaml
-pomodoro:
-  focus_minutes: 25
-  short_break_minutes: 5
-  long_break_minutes: 15
-  rounds_until_long_break: 4
-  auto_pause_on_break: true     # pause music when entering a break
-  auto_resume_on_focus: true    # resume music when returning to focus
-  break_stations: []            # empty = silence during breaks
-```
-
-Press `p` to start a focus session. The right-hand panel appears with a
-countdown and round counter; today's listened time and current streak
-fill in below. Native macOS notifications (`osascript`) and Linux
-notifications (`notify-send` if installed) fire on each phase
-transition. Stats persist between runs via `state.json`.
-
 ## State
 
 `$XDG_STATE_HOME/lofi-player/state.json` — defaults to
 `~/.local/state/lofi-player/state.json` on both Linux and macOS.
-Remembers the last theme, volume, station, and pomodoro stats
-(today's listened time, streak, last focus date) between sessions.
+Remembers the last theme, volume, and station between sessions.
 Persistence is best-effort — a write failure logs to stderr but never
 aborts shutdown.
 
@@ -144,8 +122,6 @@ main.go                      entry point: load config + state, start mpv, run TU
 internal/
   audio/                     mpv subprocess + JSON-IPC client
   config/                    YAML config + XDG paths + defaults
-  notify/                    OS desktop notifications (osascript / notify-send)
-  pomodoro/                  pure focus-timer state machine + stats
   state/                     state.json — last-session persistence
   theme/                     palettes (tokyo-night, catppuccin-mocha, gruvbox-dark, rose-pine)
   tui/                       Bubble Tea model / update / view / keys / styles / mini / toast / anim

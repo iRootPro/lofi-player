@@ -1,15 +1,12 @@
 package tui
 
 import (
-	"time"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
-	"github.com/iRootPro/lofi-player/internal/pomodoro"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -23,7 +20,7 @@ type Track struct {
 
 // Options groups the optional initial-state knobs NewModel honors. A
 // zero value is a valid starting point: theme defaults to cfg.Theme,
-// volume to cfg.Volume, no autoplay, fresh pomodoro stats.
+// volume to cfg.Volume, no autoplay.
 type Options struct {
 	// Theme overrides cfg.Theme when non-empty (used to apply the
 	// state.json snapshot from a previous session).
@@ -33,9 +30,6 @@ type Options struct {
 	// AutoplayStation is the index in cfg.Stations to start playing on
 	// startup. -1 (or out-of-range) means no autoplay.
 	AutoplayStation int
-	// Stats restores the persisted pomodoro stats. Zero value means
-	// "fresh slate".
-	Stats pomodoro.Stats
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -79,17 +73,12 @@ type Model struct {
 	currentTrack Track
 	toast        *Toast
 
-	// spinner ticks at ~10 Hz and renders the buffering placeholder
-	// inside the now-playing card while ICY/media-title metadata is in
-	// flight. The tick keeps running globally; the renderer only uses
-	// it when there's nothing else to show.
+	// spinner ticks at ~10 Hz and renders the buffering indicator in the
+	// status slot while mpv is loading a stream. The tick keeps running
+	// globally; the renderer only consults it when loading is true.
 	spinner spinner.Model
 
 	autoplayURL string
-
-	session        pomodoro.Session
-	stats          pomodoro.Stats
-	pomoTickActive bool
 
 	width, height int
 	showFullHelp  bool
@@ -147,8 +136,6 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		volumeDisplayed: float64(volume),
 		spinner:         sp,
 		autoplayURL:     autoplayURL,
-		session:         pomodoro.New(),
-		stats:           opts.Stats,
 	}
 }
 
@@ -179,22 +166,6 @@ func (m Model) LastStationName() string {
 		return ""
 	}
 	return m.cfg.Stations[m.playingIdx].Name
-}
-
-// Stats returns the current pomodoro stats — used by main on shutdown
-// to persist the user's session history.
-func (m Model) Stats() pomodoro.Stats { return m.stats }
-
-// pomoConfig returns the runtime pomodoro.Config derived from the YAML
-// config's PomodoroConfig (which uses minutes for friendliness).
-func (m Model) pomoConfig() pomodoro.Config {
-	pc := m.cfg.Pomodoro
-	return pomodoro.Config{
-		FocusDuration:        time.Duration(pc.FocusMinutes) * time.Minute,
-		ShortBreakDuration:   time.Duration(pc.ShortBreakMinutes) * time.Minute,
-		LongBreakDuration:    time.Duration(pc.LongBreakMinutes) * time.Minute,
-		RoundsUntilLongBreak: pc.RoundsUntilLongBreak,
-	}
 }
 
 func clampVolume(v int) int {

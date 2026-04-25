@@ -1,7 +1,5 @@
 package tui
 
-import "time"
-
 // Bridge messages between internal/audio events and the Bubble Tea
 // Update loop. The translator in commands.go maps each audio.Event into
 // the matching XxxMsg here.
@@ -32,8 +30,3 @@ type EOFMsg struct{}
 // clearToastMsg is delivered by a delayed tea.Tick to wipe an active
 // Toast after its lifetime expires.
 type clearToastMsg struct{}
-
-// pomodoroTickMsg is the 1 Hz tick that drives the pomodoro state
-// machine, listened-time accumulation, and countdown display refresh
-// while a session is active.
-type pomodoroTickMsg struct{ at time.Time }

@@ -33,10 +33,6 @@ type State struct {
 	// station; the loader matches it back to an index in cfg.Stations
 	// so renaming a station doesn't break the autoplay-on-startup path.
 	LastStationName string `json:"last_station_name,omitempty"`
-	// Pomodoro is opaque storage for Phase 3's pomodoro stats. Phase 2
-	// preserves whatever's there on read/write so an upgrade doesn't
-	// drop session history.
-	Pomodoro json.RawMessage `json:"pomodoro,omitempty"`
 }
 
 // Path returns the canonical path to the state file. It honors

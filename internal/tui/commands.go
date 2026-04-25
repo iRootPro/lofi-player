@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
-	"github.com/iRootPro/lofi-player/internal/notify"
 )
 
 // toastLifetime is how long a Toast stays visible before a delayed Tick
@@ -87,21 +86,4 @@ func clearToastAfter() tea.Cmd {
 	return tea.Tick(toastLifetime, func(time.Time) tea.Msg {
 		return clearToastMsg{}
 	})
-}
-
-// pomodoroTick schedules the next 1 Hz pomodoro tick.
-func pomodoroTick() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return pomodoroTickMsg{at: t}
-	})
-}
-
-// notifyCmd fires a desktop notification asynchronously. The result is
-// always nil because notify.Send is best-effort and never reports
-// failures.
-func notifyCmd(title, body string) tea.Cmd {
-	return func() tea.Msg {
-		_ = notify.Send(title, body)
-		return nil
-	}
 }
