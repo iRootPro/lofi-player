@@ -1,6 +1,12 @@
 // Package state persists the user's last session — last station, volume,
 // theme, plus a forward-compatible Pomodoro blob filled in Phase 3.
 //
+// State files live at $XDG_STATE_HOME/lofi-player/state.json — and when
+// XDG_STATE_HOME isn't set, at $HOME/.local/state/lofi-player/state.json
+// on both Linux and macOS. Plan §9 prefers the XDG-style path over the
+// macOS-native ~/Library/Application Support for consistency with
+// other terminal tools.
+//
 // Persistence is best-effort (plan §6 Phase 2 pitfall): both Load and
 // Save swallow filesystem errors and return safe defaults rather than
 // surfacing them to callers. A missing or malformed state file is
@@ -10,11 +16,11 @@ package state
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/adrg/xdg"
+	"runtime"
 )
 
 // State is the persisted slice of UI session state.
@@ -33,26 +39,60 @@ type State struct {
 	Pomodoro json.RawMessage `json:"pomodoro,omitempty"`
 }
 
-// Path returns the canonical XDG state path, creating any missing parent
-// directories along the way. Errors here are not fatal — callers should
-// fall back to in-memory operation if Path returns one.
+// Path returns the canonical path to the state file. It honors
+// $XDG_STATE_HOME when set; otherwise falls back to $HOME/.local/state/
+// on both Linux and macOS (plan §9). The parent directory is created
+// on demand by Save.
 func Path() (string, error) {
-	p, err := xdg.StateFile("lofi-player/state.json")
-	if err != nil {
-		return "", err
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolving home directory: %w", err)
+		}
+		base = filepath.Join(home, ".local", "state")
 	}
-	return p, nil
+	return filepath.Join(base, "lofi-player", "state.json"), nil
 }
 
 // Load reads the persisted state from the canonical XDG path. A missing
 // or unreadable file yields an empty State without an error — see the
-// package documentation for the rationale.
+// package documentation for the rationale. On macOS, a one-time
+// migration moves any pre-existing state from the legacy
+// ~/Library/Application Support/lofi-player/ location to the new
+// XDG-style path.
 func Load() *State {
 	p, err := Path()
 	if err != nil {
 		return &State{}
 	}
+	migrateLegacyMacOS(p)
 	return loadFromFile(p)
+}
+
+// migrateLegacyMacOS moves state.json from the macOS-native
+// ~/Library/Application Support/lofi-player/ location to the new
+// XDG-style path when the new path is empty. Idempotent, no-op on
+// Linux, errors swallowed.
+func migrateLegacyMacOS(newPath string) {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	legacy := filepath.Join(home, "Library", "Application Support", "lofi-player", "state.json")
+	if _, err := os.Stat(legacy); err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return
+	}
+	_ = os.Rename(legacy, newPath)
 }
 
 // Save writes s to the canonical XDG path. Errors are returned for the

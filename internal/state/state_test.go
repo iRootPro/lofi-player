@@ -8,6 +8,31 @@ import (
 	"testing"
 )
 
+func TestPath_RespectsXDGStateHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/tmp/state-override")
+	got, err := Path()
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	want := "/tmp/state-override/lofi-player/state.json"
+	if got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestPath_FallsBackToHomeLocalState(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	got, err := Path()
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".local", "state", "lofi-player", "state.json")
+	if got != want {
+		t.Errorf("Path() = %q, want %q (no Library/Application Support on macOS)", got, want)
+	}
+}
+
 func TestLoadFromFile_MissingFileYieldsZero(t *testing.T) {
 	dir := t.TempDir()
 	got := loadFromFile(filepath.Join(dir, "absent.json"))

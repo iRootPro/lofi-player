@@ -70,9 +70,12 @@ set -g status-right '#(lofi-player --statusline)'
 
 ## Configuration
 
-`$XDG_CONFIG_HOME/lofi-player/config.yaml` — usually
-`~/.config/lofi-player/config.yaml` on both Linux and macOS. Created
-with sensible defaults on first run; documented example at
+`$XDG_CONFIG_HOME/lofi-player/config.yaml` — defaults to
+`~/.config/lofi-player/config.yaml` on both Linux and macOS (the
+macOS-native `~/Library/Application Support` is intentionally _not_
+used; terminal users expect the XDG-style path). Created automatically
+on first run with sensible defaults — no manual setup needed. A
+documented example lives at
 [`configs/lofi-player.example.yaml`](configs/lofi-player.example.yaml).
 
 ```yaml
@@ -116,10 +119,12 @@ transition. Stats persist between runs via `state.json`.
 
 ## State
 
-`$XDG_STATE_HOME/lofi-player/state.json` remembers the last theme,
-volume, station, and pomodoro stats (today's listened time, streak,
-last focus date) between sessions. Persistence is best-effort — a write
-failure logs to stderr but never aborts shutdown.
+`$XDG_STATE_HOME/lofi-player/state.json` — defaults to
+`~/.local/state/lofi-player/state.json` on both Linux and macOS.
+Remembers the last theme, volume, station, and pomodoro stats
+(today's listened time, streak, last focus date) between sessions.
+Persistence is best-effort — a write failure logs to stderr but never
+aborts shutdown.
 
 ## Project layout
 

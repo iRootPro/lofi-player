@@ -1,13 +1,17 @@
 // Package config loads and persists the user's YAML configuration.
 //
-// Config files live at $XDG_CONFIG_HOME/lofi-player/config.yaml — typically
-// ~/.config/lofi-player/config.yaml on both Linux and macOS, since adrg/xdg
-// applies XDG conventions on macOS too. On a fresh install the file does
-// not exist; Load writes Defaults() into it, then returns those defaults.
+// Config files live at $XDG_CONFIG_HOME/lofi-player/config.yaml — and
+// when XDG_CONFIG_HOME isn't set, at $HOME/.config/lofi-player/config.yaml
+// on both Linux and macOS. The macOS-native ~/Library/Application Support
+// is intentionally not used: terminal users expect the XDG-style path,
+// per project plan §9.
 //
-// Subsequent reads pre-fill a Config with Defaults() and unmarshal the
-// file on top, so missing keys keep their default values while present
-// keys (including an explicit empty stations list) are honored as-is.
+// On a fresh install the file does not exist; Load writes Defaults()
+// into it (creating the parent directories along the way), then
+// returns those defaults. Subsequent reads pre-fill a Config with
+// Defaults() and unmarshal the file on top, so missing keys keep their
+// default values while present keys (including an explicit empty
+// stations list) are honored as-is.
 package config
 
 import (
@@ -15,8 +19,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"runtime"
 
-	"github.com/adrg/xdg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,24 +113,70 @@ func Defaults() Config {
 	}
 }
 
-// Path returns the canonical XDG path to the config file, creating any
-// missing parent directories along the way.
+// Path returns the canonical path to the config file. It honors
+// $XDG_CONFIG_HOME when set; otherwise falls back to $HOME/.config/
+// on both Linux and macOS (plan §9). The parent directory is created
+// on demand by Save — Load tolerates a missing file.
 func Path() (string, error) {
-	p, err := xdg.ConfigFile("lofi-player/config.yaml")
-	if err != nil {
-		return "", fmt.Errorf("resolving XDG config path: %w", err)
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolving home directory: %w", err)
+		}
+		base = filepath.Join(home, ".config")
 	}
-	return p, nil
+	return filepath.Join(base, "lofi-player", "config.yaml"), nil
+}
+
+// macOSLegacyPath returns the location adrg/xdg used on macOS before
+// the project switched to its own XDG-style resolver. Empty string on
+// non-darwin platforms or when the home directory can't be resolved.
+func macOSLegacyPath() string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Library", "Application Support", "lofi-player", "config.yaml")
+}
+
+// migrateLegacyMacOS moves the config from the macOS-native
+// ~/Library/Application Support/lofi-player/ location to the new
+// XDG-style ~/.config/lofi-player/ location, but only when the new
+// path is empty. Idempotent. No-op on Linux. Best-effort: errors are
+// swallowed so a permission glitch never crashes the app.
+func migrateLegacyMacOS(newPath string) {
+	legacy := macOSLegacyPath()
+	if legacy == "" || legacy == newPath {
+		return
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return // new path already populated
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		return // no legacy file to migrate
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return
+	}
+	_ = os.Rename(legacy, newPath)
 }
 
 // Load reads the user's configuration from the canonical XDG path.
 // On first run the file is created with Defaults() and those defaults
-// are returned. See package documentation for the merge semantics.
+// are returned. On macOS, a one-time migration moves any pre-existing
+// config from the legacy ~/Library/Application Support/lofi-player/
+// location to the new XDG-style path. See package documentation for
+// the merge semantics.
 func Load() (*Config, error) {
 	p, err := Path()
 	if err != nil {
 		return nil, err
 	}
+	migrateLegacyMacOS(p)
 	return loadFromFile(p)
 }
 
@@ -182,6 +233,9 @@ func saveToFile(path string, cfg *Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating config dir: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing %q: %w", path, err)

@@ -4,8 +4,102 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
+
+func TestPath_RespectsXDGConfigHome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-override")
+	got, err := Path()
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	want := "/tmp/xdg-override/lofi-player/config.yaml"
+	if got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestMigrateLegacyMacOS_NoOpOnLinux_OrWhenLegacyAbsent(t *testing.T) {
+	// On Linux this is always a no-op. On macOS it's a no-op too when
+	// the legacy file doesn't exist. Either way, calling it must not
+	// panic or error.
+	dir := t.TempDir()
+	migrateLegacyMacOS(filepath.Join(dir, "nope.yaml"))
+}
+
+func TestMigrateLegacyMacOS_MovesWhenNewPathEmpty(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("legacy macOS path migration is darwin-only")
+	}
+
+	// Build a fake $HOME so the migration helper sees a controlled
+	// "legacy" file without touching the real ~/Library tree.
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	legacyDir := filepath.Join(fakeHome, "Library", "Application Support", "lofi-player")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("seed legacy dir: %v", err)
+	}
+	legacyFile := filepath.Join(legacyDir, "config.yaml")
+	wantContent := []byte("theme: rose-pine\nvolume: 33\n")
+	if err := os.WriteFile(legacyFile, wantContent, 0o644); err != nil {
+		t.Fatalf("seed legacy file: %v", err)
+	}
+
+	newPath := filepath.Join(fakeHome, ".config", "lofi-player", "config.yaml")
+	migrateLegacyMacOS(newPath)
+
+	got, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("post-migration read of %q: %v", newPath, err)
+	}
+	if string(got) != string(wantContent) {
+		t.Errorf("migrated content mismatch\n got:  %s\n want: %s", got, wantContent)
+	}
+	if _, err := os.Stat(legacyFile); err == nil {
+		t.Errorf("legacy file %q still present after migration", legacyFile)
+	}
+}
+
+func TestMigrateLegacyMacOS_DoesNotOverwriteExisting(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("legacy macOS path migration is darwin-only")
+	}
+	fakeHome := t.TempDir()
+	t.Setenv("HOME", fakeHome)
+
+	// Both old and new files exist; the new one must win unchanged.
+	legacyDir := filepath.Join(fakeHome, "Library", "Application Support", "lofi-player")
+	os.MkdirAll(legacyDir, 0o755)
+	os.WriteFile(filepath.Join(legacyDir, "config.yaml"), []byte("legacy"), 0o644)
+
+	newDir := filepath.Join(fakeHome, ".config", "lofi-player")
+	os.MkdirAll(newDir, 0o755)
+	newPath := filepath.Join(newDir, "config.yaml")
+	os.WriteFile(newPath, []byte("current"), 0o644)
+
+	migrateLegacyMacOS(newPath)
+
+	got, _ := os.ReadFile(newPath)
+	if string(got) != "current" {
+		t.Errorf("new file overwritten — got %q, want %q", got, "current")
+	}
+}
+
+func TestPath_FallsBackToHomeDotConfig(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	got, err := Path()
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".config", "lofi-player", "config.yaml")
+	if got != want {
+		t.Errorf("Path() = %q, want %q (no Library/Application Support on macOS)", got, want)
+	}
+}
 
 func TestLoadFromFile_FirstRunWritesDefaults(t *testing.T) {
 	dir := t.TempDir()
