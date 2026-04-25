@@ -53,6 +53,15 @@ type AmbientMixer struct {
 // user cache.
 var cacheDirFn = defaultCacheDir
 
+// SetCacheDirForTest redirects the ambient cache root for the duration
+// of a test. Returns a restore function to be deferred. Production code
+// must not call this.
+func SetCacheDirForTest(dir string) func() {
+	prev := cacheDirFn
+	cacheDirFn = func() (string, error) { return dir, nil }
+	return func() { cacheDirFn = prev }
+}
+
 func defaultCacheDir() (string, error) {
 	base, err := os.UserCacheDir()
 	if err != nil {

@@ -206,8 +206,9 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
 }
 
-// updateMixer routes input while the ambient mixer modal is open. For
-// now only close keys are handled — Task 10 wires j/k/h/l/0/1.
+// updateMixer routes input while the ambient mixer modal is open.
+// Close keys (esc/x) and global quit are intercepted; everything else
+// is delegated to mixerUI.handle.
 func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	km, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -220,5 +221,6 @@ func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	}
+	m.mixerUI = m.mixerUI.handle(km.String())
 	return m, nil
 }
