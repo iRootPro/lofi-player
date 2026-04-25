@@ -77,7 +77,7 @@ func (m Model) View() string {
 		content = inner.viewFull()
 	}
 
-	title := iconLogo + "  lofi.player"
+	title := iconLogo + " lofi.player"
 	rightLabel := inner.renderVolume()
 	// "?" picks up the brand Primary so it reads as part of the same
 	// interactive-element family as the logo and the volume icon;
@@ -274,7 +274,7 @@ func (m Model) renderVolume() string {
 
 func (m Model) renderStations() string {
 	var b strings.Builder
-	header := iconStations + "  stations"
+	header := iconStations + " stations"
 	if n := len(m.cfg.Stations); n > 0 {
 		header += fmt.Sprintf("  ·  %d", n)
 	}
