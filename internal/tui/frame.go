@@ -22,15 +22,17 @@ import (
 // above and below the content for vertical breathing.
 //
 // borderStyle paints the corners and "─"/"│" segments. titleStyle
-// paints the title text. rightLabel is passed in pre-styled — that
-// way the caller can compose multi-color content (e.g. an icon +
-// fill bar + percent) without renderFrame trying to wrap the whole
-// string in a single foreground color.
+// paints the title text. rightLabel and bottomLabel are passed in
+// pre-styled — that way the caller can compose multi-color content
+// (e.g. an icon + fill bar) without renderFrame trying to wrap the
+// whole string in a single foreground color. bottomLabel sits in
+// the right portion of the bottom border, mirroring rightLabel up
+// top.
 //
 // lipgloss has no native API for title-in-border; corners and side
 // bars are composed manually so the title can interrupt the top
 // border.
-func renderFrame(content, title, rightLabel string, width int, borderStyle, titleStyle lipgloss.Style) string {
+func renderFrame(content, title, rightLabel, bottomLabel string, width int, borderStyle, titleStyle lipgloss.Style) string {
 	if width < 8 {
 		width = 8
 	}
@@ -58,7 +60,17 @@ func renderFrame(content, title, rightLabel string, width int, borderStyle, titl
 		rightSeg + borderStyle.Render("─") +
 		borderStyle.Render("╮")
 
-	bottom := borderStyle.Render("╰" + strings.Repeat("─", inner) + "╯")
+	// Bottom border mirrors the top — optional label sits on the right.
+	bottomSeg := ""
+	if bottomLabel != "" {
+		bottomSeg = " " + bottomLabel + " "
+	}
+	bottomFillerW := max(0, inner-2-lipgloss.Width(bottomSeg))
+	bottom := borderStyle.Render("╰") +
+		borderStyle.Render("─") +
+		borderStyle.Render(strings.Repeat("─", bottomFillerW)) +
+		bottomSeg + borderStyle.Render("─") +
+		borderStyle.Render("╯")
 
 	leftBar := borderStyle.Render("│")
 	rightBar := borderStyle.Render("│")

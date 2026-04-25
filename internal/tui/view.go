@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/config"
@@ -80,11 +79,13 @@ func (m Model) View() string {
 
 	title := iconLogo + "  lofi.player"
 	rightLabel := inner.renderVolume()
+	bottomLabel := m.styles.HelpKey.Render("?") + " " + m.styles.HelpDesc.Render("help")
 
 	framed := renderFrame(
 		content,
 		title,
 		rightLabel,
+		bottomLabel,
 		frameWidth,
 		lipgloss.NewStyle().Foreground(m.theme.Muted),
 		m.styles.AppTitle,
@@ -113,8 +114,10 @@ func (m Model) viewFull() string {
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderStations())
-	b.WriteString("\n\n")
-	b.WriteString(m.renderHelpOrToast())
+	if extra := m.renderTransientFooter(); extra != "" {
+		b.WriteString("\n\n")
+		b.WriteString(extra)
+	}
 	return b.String()
 }
 
@@ -125,12 +128,9 @@ func (m Model) viewFull() string {
 func (m Model) viewMini() string {
 	var b strings.Builder
 	b.WriteString(m.renderNowPlaying())
-	b.WriteString("\n")
 	if m.toast != nil {
+		b.WriteString("\n")
 		b.WriteString(m.renderToast())
-	} else {
-		parts := renderBindings(m.styles, m.keys.MiniShortHelp())
-		b.WriteString(leftPad + strings.Join(parts, "   "))
 	}
 	return b.String()
 }
@@ -326,14 +326,22 @@ func (m Model) renderStations() string {
 	return b.String()
 }
 
-func (m Model) renderHelpOrToast() string {
+// renderTransientFooter returns the optional content that appears
+// between the stations list and the bottom border:
+//   - active toast (auto-dismissed after a few seconds), OR
+//   - the full help card while the user is holding `?` open.
+//
+// When neither is active the function returns "" and viewFull skips
+// the slot entirely so the bottom border sits flush with the
+// stations list.
+func (m Model) renderTransientFooter() string {
 	if m.toast != nil {
 		return m.renderToast()
 	}
 	if m.showFullHelp {
 		return m.renderFullHelp()
 	}
-	return m.renderShortHelp()
+	return ""
 }
 
 func (m Model) renderToast() string {
@@ -343,13 +351,6 @@ func (m Model) renderToast() string {
 		out += t.labelStyle(m.styles).Render(label)
 	}
 	return out + m.styles.HelpDesc.Render(t.Message)
-}
-
-func (m Model) renderShortHelp() string {
-	parts := renderBindings(m.styles, m.keys.ShortHelp())
-	// Triple-space gives a soft "tab" between bindings without the
-	// noise of an explicit separator glyph.
-	return leftPad + strings.Join(parts, "   ")
 }
 
 func (m Model) renderFullHelp() string {
@@ -388,14 +389,3 @@ func (m Model) renderFullHelp() string {
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
 }
 
-func renderBindings(s Styles, bindings []key.Binding) []string {
-	out := make([]string, 0, len(bindings))
-	for _, b := range bindings {
-		h := b.Help()
-		if h.Key == "" || h.Desc == "" {
-			continue
-		}
-		out = append(out, s.HelpKey.Render(h.Key)+" "+s.HelpDesc.Render(h.Desc))
-	}
-	return out
-}

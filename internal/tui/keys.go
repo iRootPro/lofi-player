@@ -3,9 +3,10 @@ package tui
 import "github.com/charmbracelet/bubbles/key"
 
 // KeyMap describes the keyboard bindings available in the TUI.
-//
-// It satisfies the help.KeyMap interface (ShortHelp + FullHelp) so that
-// the help renderer can read bindings without knowing about Model.
+// FullHelp returns the grouped bindings shown in the help card
+// (toggled by `?`); short / mini help variants used to live here too
+// but were dropped when the inline help bar moved into the frame's
+// bottom border.
 type KeyMap struct {
 	Up         key.Binding
 	Down       key.Binding
@@ -67,11 +68,6 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// ShortHelp returns the bindings shown in the compact help bar.
-func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Down, k.VolUp, k.AddStation, k.ThemeCycle, k.Mini, k.Help, k.Quit}
-}
-
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
@@ -80,10 +76,4 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.ThemeCycle, k.Mini},
 		{k.Help, k.Quit},
 	}
-}
-
-// MiniShortHelp returns the smaller binding set shown at the bottom of
-// the mini-mode view: just the basics that fit on one line.
-func (k KeyMap) MiniShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Mini, k.Quit}
 }
