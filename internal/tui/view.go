@@ -77,7 +77,7 @@ func (m Model) viewFull() string {
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderNowPlaying())
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderMainArea())
@@ -263,9 +263,9 @@ func (m Model) renderNowPlaying() string {
 	if cardWidth < 24 {
 		cardWidth = 24
 	}
-	// Inside the card: 2 chars of horizontal padding on each side leave
-	// (cardWidth - 2 borders - 4 padding) for content.
-	innerWidth := cardWidth - 6
+	// Inside the card: 1 char of horizontal padding on each side leaves
+	// (cardWidth - 2 borders - 2 padding) for content.
+	innerWidth := cardWidth - 4
 
 	name := m.cfg.Stations[m.playingIdx].Name
 	statusGlyph := statusGlyphLive
@@ -282,18 +282,27 @@ func (m Model) renderNowPlaying() string {
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Muted).
-		Padding(0, 2).
+		Padding(0, 1).
 		Width(cardWidth).
 		MarginLeft(len(leftPad)).
 		Render(inner)
 	return card
 }
 
-// formatTrack returns the second line of the now-playing block. When
-// metadata hasn't arrived yet (typical for the first ~2 s of a fresh
-// stream), it returns a muted "…" placeholder. Long titles are
-// truncated to maxWidth with an ellipsis so the card doesn't reflow
-// when a verbose title arrives.
+// formatTrack returns the second line of the now-playing block.
+//
+//   - Empty metadata → a muted "…" placeholder so the card stays
+//     two lines tall while ICY/media-title is in flight.
+//   - Real "Artist — Title" metadata → title in foreground, artist
+//     in the warning accent. This is the "real track playing" case.
+//   - Title only (no artist split) → muted styling. mpv's ytdl_hook
+//     surfaces the YouTube channel description here when no track
+//     metadata exists ("lofi hip hop radio  beats to relax/study
+//     to ..."); rendering it muted communicates "stream descriptor"
+//     rather than "song title".
+//
+// Long strings are truncated to maxWidth with an ellipsis so the
+// card doesn't reflow when a verbose value arrives.
 func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
 		return m.styles.Hint.Render("…")
@@ -302,7 +311,6 @@ func (m Model) formatTrack(maxWidth int) string {
 	sep := "  —  "
 	switch {
 	case m.currentTrack.Artist != "" && m.currentTrack.Title != "":
-		// Reserve space for the separator + artist; truncate the title.
 		artist := m.currentTrack.Artist
 		artistRendered := m.styles.HelpKey.Render(artist)
 		titleBudget := maxWidth - lipgloss.Width(sep) - lipgloss.Width(artist)
@@ -314,7 +322,7 @@ func (m Model) formatTrack(maxWidth int) string {
 			m.styles.SectionHeader.Render(sep) +
 			artistRendered
 	case m.currentTrack.Title != "":
-		return m.styles.StationItem.Render(truncateRunes(m.currentTrack.Title, maxWidth))
+		return m.styles.HelpDesc.Render(truncateRunes(m.currentTrack.Title, maxWidth))
 	default:
 		return m.styles.HelpKey.Render(truncateRunes(m.currentTrack.Artist, maxWidth))
 	}
@@ -407,7 +415,8 @@ func (m Model) renderStations() string {
 		b.WriteString(leftPad + cursor + marker + " " + name + "\n")
 	}
 
-	b.WriteString("\n")
+	// Tight gap between the last station and "+ add station" — the
+	// affordance reads as part of the list rather than a stranded line.
 	b.WriteString(leftPad + "    " + m.styles.AddStation.Render("+ add station"))
 	return b.String()
 }
