@@ -74,7 +74,9 @@ func run() error {
 	}
 	defer player.Close()
 
-	p := tea.NewProgram(tui.NewModel(cfg, player, opts), tea.WithAltScreen())
+	mixer := audio.NewAmbientMixer()
+
+	p := tea.NewProgram(tui.NewModel(cfg, player, mixer, opts), tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
 		return err

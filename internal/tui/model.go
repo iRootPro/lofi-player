@@ -39,6 +39,7 @@ const (
 	modeFull viewMode = iota
 	modeMini
 	modeAddStation
+	modeMixer
 )
 
 // Model is the root Bubble Tea model.
@@ -83,16 +84,20 @@ type Model struct {
 	showFullHelp  bool
 	mode          viewMode
 
-	// modePrev is the layout to restore when a modal (modeAddStation)
-	// closes. modeFull during everyday usage; modeMini if the modal
-	// was opened from compact mode.
+	// modePrev is the layout to restore when a modal (modeAddStation,
+	// modeMixer) closes. modeFull during everyday usage; modeMini if
+	// the modal was opened from compact mode.
 	modePrev viewMode
 	addForm  addStationForm
+
+	mixer   *audio.AmbientMixer
+	mixerUI mixerModel
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
-// of the Player — the caller (main) is responsible for Close.
-func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
+// of the Player or AmbientMixer — the caller (main) is responsible for
+// closing them.
+func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixer, opts Options) Model {
 	themeName := cfg.Theme
 	if opts.Theme != "" {
 		themeName = opts.Theme
@@ -134,6 +139,8 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		volume:      volume,
 		spinner:     sp,
 		autoplayURL: autoplayURL,
+		mixer:       mixer,
+		mixerUI:     newMixerModel(mixer),
 	}
 }
 

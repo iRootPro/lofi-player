@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 )
 
@@ -24,7 +25,7 @@ func fixture() Model {
 			{Name: "C", URL: "http://c"},
 		},
 	}
-	m := NewModel(cfg, nil, Options{AutoplayStation: -1})
+	m := NewModel(cfg, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return updated.(Model)
 }
@@ -40,6 +41,8 @@ func send(t *testing.T, m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		case "down":
 			msg = tea.KeyMsg{Type: tea.KeyDown}
+		case "esc":
+			msg = tea.KeyMsg{Type: tea.KeyEsc}
 		default:
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		}
@@ -64,7 +67,7 @@ func TestView_RendersWhenSized(t *testing.T) {
 }
 
 func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
-	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, Options{AutoplayStation: -1})
+	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	if got := m.View(); got != "" {
 		t.Errorf("View() should be empty before WindowSizeMsg, got %q", got)
 	}
@@ -178,4 +181,38 @@ func TestView_ShowsPlayingMarker(t *testing.T) {
 	if !strings.Contains(out, "◯") {
 		t.Errorf("expected ◯ paused indicator after pause; got:\n%s", out)
 	}
+}
+
+func TestPressXOpensMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x")
+	if m.mode != modeMixer {
+		t.Errorf("mode after x: got %v, want modeMixer", m.mode)
+	}
+}
+
+func TestPressEscClosesMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x", "esc")
+	if m.mode != modeFull {
+		t.Errorf("mode after x+esc: got %v, want modeFull", m.mode)
+	}
+}
+
+func TestPressXAgainClosesMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x", "x")
+	if m.mode != modeFull {
+		t.Errorf("mode after x+x: got %v, want modeFull", m.mode)
+	}
+}
+
+func TestKeyMapHasMixerOpenX(t *testing.T) {
+	km := DefaultKeyMap()
+	for _, k := range km.MixerOpen.Keys() {
+		if k == "x" {
+			return
+		}
+	}
+	t.Error("MixerOpen does not include 'x'")
 }

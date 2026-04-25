@@ -23,6 +23,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.mode == modeAddStation {
 		return m.updateAddStation(msg)
 	}
+	if m.mode == modeMixer {
+		return m.updateMixer(msg)
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -130,6 +133,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Tell bubbles/textinput to start its cursor blink.
 		return m, m.addForm.name.Cursor.BlinkCmd()
 
+	case key.Matches(msg, m.keys.MixerOpen):
+		m.modePrev = m.mode
+		m.mode = modeMixer
+		return m, nil
+
 	case key.Matches(msg, m.keys.Help):
 		m.showFullHelp = !m.showFullHelp
 		return m, nil
@@ -196,4 +204,21 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.loading = true
 	m.currentTrack = Track{}
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
+}
+
+// updateMixer routes input while the ambient mixer modal is open. For
+// now only close keys are handled — Task 10 wires j/k/h/l/0/1.
+func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "esc", "x":
+		m.mode = m.modePrev
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
 }
