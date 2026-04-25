@@ -183,6 +183,27 @@ func (m *AmbientMixer) Volume(id string) int {
 	return 0
 }
 
+func (m *AmbientMixer) Volumes() map[string]int {
+	out := make(map[string]int, len(m.runtime))
+	for _, rc := range m.runtime {
+		if rc == nil {
+			continue
+		}
+		out[rc.meta.ID] = rc.volume
+	}
+	return out
+}
+
+func (m *AmbientMixer) ActiveIDs() []string {
+	var out []string
+	for _, rc := range m.runtime {
+		if rc != nil && rc.volume > 0 {
+			out = append(out, rc.meta.ID)
+		}
+	}
+	return out
+}
+
 func (m *AmbientMixer) find(id string) *runtimeChannel {
 	for _, rc := range m.runtime {
 		if rc != nil && rc.meta.ID == id {

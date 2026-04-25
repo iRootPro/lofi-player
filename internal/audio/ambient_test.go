@@ -259,3 +259,49 @@ func TestMixerVolumeDefaultZero(t *testing.T) {
 		t.Errorf("Volume(unknown): got %d, want 0", got)
 	}
 }
+
+func TestMixerVolumesSnapshot(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	got := m.Volumes()
+	for _, id := range m.ChannelIDs() {
+		if v := got[id]; v != 0 {
+			t.Errorf("default Volumes[%s]: got %d, want 0", id, v)
+		}
+	}
+
+	_ = m.SetVolume("rain", 40)
+	_ = m.SetVolume("white_noise", 25)
+
+	got = m.Volumes()
+	if got["rain"] != 40 || got["white_noise"] != 25 || got["fire"] != 0 {
+		t.Errorf("Volumes after sets: %+v", got)
+	}
+}
+
+func TestMixerActiveIDsOrder(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	if got := m.ActiveIDs(); len(got) != 0 {
+		t.Errorf("default ActiveIDs: %v, want empty", got)
+	}
+
+	_ = m.SetVolume("white_noise", 10)
+	_ = m.SetVolume("rain", 5)
+
+	got := m.ActiveIDs()
+	want := []string{"rain", "white_noise"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("ActiveIDs: got %v, want %v", got, want)
+	}
+}
