@@ -91,6 +91,7 @@ func (m *AmbientMixer) Init() error {
 	for i, c := range m.channels {
 		path, err := m.materialize(dir, c)
 		if err != nil {
+			m.closeSpawned()
 			return fmt.Errorf("materialize %s: %w", c.ID, err)
 		}
 		rc := &runtimeChannel{meta: c, filePath: path}
@@ -105,6 +106,18 @@ func (m *AmbientMixer) Init() error {
 		m.runtime[i] = rc
 	}
 	return nil
+}
+
+// closeSpawned tears down any mpv subprocesses already started by Init.
+// Used on Init's own failure path so the caller never has to choose
+// between calling Close on a half-built mixer and leaking subprocesses.
+func (m *AmbientMixer) closeSpawned() {
+	for _, rc := range m.runtime {
+		if rc != nil && rc.player != nil {
+			rc.player.close()
+		}
+	}
+	m.runtime = nil
 }
 
 func (m *AmbientMixer) Close() error {
