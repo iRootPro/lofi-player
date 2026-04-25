@@ -66,16 +66,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast = nil
 		return m, nil
 
-	case volTickMsg:
-		next, vel, settled := stepVolume(m.volumeDisplayed, m.volumeVelocity, float64(m.volume))
-		m.volumeDisplayed = next
-		m.volumeVelocity = vel
-		if settled {
-			m.volumeAnimating = false
-			return m, nil
-		}
-		return m, tickVolAnim()
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -110,11 +100,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.VolUp):
 		m.volume = clampVolume(m.volume + volumeStep)
-		return m, m.startVolumeAnim(setVolumeCmd(m.player, m.volume))
+		return m, setVolumeCmd(m.player, m.volume)
 
 	case key.Matches(msg, m.keys.VolDown):
 		m.volume = clampVolume(m.volume - volumeStep)
-		return m, m.startVolumeAnim(setVolumeCmd(m.player, m.volume))
+		return m, setVolumeCmd(m.player, m.volume)
 
 	case key.Matches(msg, m.keys.ThemeCycle):
 		next, _ := theme.Lookup(theme.Next(m.theme.Name))
@@ -145,17 +135,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
-}
-
-// startVolumeAnim returns a Cmd that batches the player update with
-// the spring tick (only if not already animating, so spamming the key
-// doesn't pile up overlapping tick loops).
-func (m *Model) startVolumeAnim(playerCmd tea.Cmd) tea.Cmd {
-	if m.volumeAnimating {
-		return playerCmd
-	}
-	m.volumeAnimating = true
-	return tea.Batch(playerCmd, tickVolAnim())
 }
 
 // updateAddStation routes input to the add-station modal form. On

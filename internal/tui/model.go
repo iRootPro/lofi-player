@@ -63,13 +63,6 @@ type Model struct {
 	loading bool
 	volume  int
 
-	// volumeDisplayed is the currently-rendered (animated) volume value;
-	// volumeVelocity is the spring's velocity. Both fields are updated
-	// on each volTickMsg until the spring settles at volume.
-	volumeDisplayed float64
-	volumeVelocity  float64
-	volumeAnimating bool
-
 	currentTrack Track
 	toast        *Toast
 
@@ -129,19 +122,18 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 	sp.Style = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return Model{
-		cfg:             cfg,
-		player:          player,
-		theme:           t,
-		styles:          NewStyles(t),
-		keys:            DefaultKeyMap(),
-		cursor:          cursor,
-		playingIdx:      playingIdx,
-		playing:         playing,
-		loading:         loading,
-		volume:          volume,
-		volumeDisplayed: float64(volume),
-		spinner:         sp,
-		autoplayURL:     autoplayURL,
+		cfg:         cfg,
+		player:      player,
+		theme:       t,
+		styles:      NewStyles(t),
+		keys:        DefaultKeyMap(),
+		cursor:      cursor,
+		playingIdx:  playingIdx,
+		playing:     playing,
+		loading:     loading,
+		volume:      volume,
+		spinner:     sp,
+		autoplayURL: autoplayURL,
 	}
 }
 

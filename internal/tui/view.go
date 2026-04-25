@@ -257,32 +257,20 @@ func truncateRunes(s string, maxWidth int) string {
 	return "…"
 }
 
-// renderVolume composes the volume widget — speaker icon, animated
-// fill bar, and percentage. Used as the right-side label embedded in
-// the frame's top border (View() builds the title bar from this).
+// renderVolume composes the volume widget — speaker icon, fill bar,
+// and percentage. Used as the right-side label embedded in the
+// frame's top border. Volume changes are instant in 5%-steps; the
+// percent is right-aligned to a fixed 3-digit width ("  5%", " 80%",
+// "100%") so the title bar's filler doesn't jitter when the digit
+// count changes.
 func (m Model) renderVolume() string {
-	displayed := m.volumeDisplayed
-	if displayed < 0 {
-		displayed = 0
-	}
-	if displayed > 100 {
-		displayed = 100
-	}
-	fill := int(displayed * volumeWidth / 100)
-	if fill < 0 {
-		fill = 0
-	}
-	if fill > volumeWidth {
-		fill = volumeWidth
-	}
+	v := clampVolume(m.volume)
+	fill := v * volumeWidth / 100
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
-	// Percent is computed from `displayed` (the spring-animated value)
-	// so the digit ticks in lockstep with the bar instead of jumping
-	// straight to the target while the bar is still catching up.
 	return m.styles.VolLabel.Render(iconVolume) + "  " +
 		bar + "  " +
-		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", int(displayed+0.5)))
+		m.styles.VolPercent.Render(fmt.Sprintf("%3d%%", v))
 }
 
 func (m Model) renderStations() string {
