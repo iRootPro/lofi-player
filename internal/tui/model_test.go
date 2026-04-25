@@ -216,3 +216,38 @@ func TestKeyMapHasMixerOpenX(t *testing.T) {
 	}
 	t.Error("MixerOpen does not include 'x'")
 }
+
+func TestGlobalKeysDisabledInMixerModal(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x") // open mixer
+	if m.mode != modeMixer {
+		t.Fatalf("setup: mode = %v, want modeMixer", m.mode)
+	}
+
+	// Volume key — must not change m.volume while modal is open.
+	originalVolume := m.volume
+	m = send(t, m, "+")
+	if m.volume != originalVolume {
+		t.Errorf("global '+' fired in mixer modal: %d -> %d", originalVolume, m.volume)
+	}
+
+	// Theme cycle — must not swap theme.
+	originalTheme := m.theme.Name
+	m = send(t, m, "t")
+	if m.theme.Name != originalTheme {
+		t.Errorf("global 't' fired in mixer modal: %s -> %s", originalTheme, m.theme.Name)
+	}
+
+	// Help — must not toggle.
+	originalHelp := m.showFullHelp
+	m = send(t, m, "?")
+	if m.showFullHelp != originalHelp {
+		t.Errorf("global '?' fired in mixer modal: %v -> %v", originalHelp, m.showFullHelp)
+	}
+
+	// AddStation — must not switch mode away from modeMixer.
+	m = send(t, m, "a")
+	if m.mode != modeMixer {
+		t.Errorf("global 'a' fired in mixer modal: mode = %v", m.mode)
+	}
+}
