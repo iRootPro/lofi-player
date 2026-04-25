@@ -168,20 +168,20 @@ func (m Model) renderNowPlaying() string {
 	return stationLine + "\n" + trackLine
 }
 
-// stationKindIcon returns a tiny muted "· youtube" tag for YouTube-
-// kind stations. Stream (the default) and unknown kinds get no
-// marker — the rule is "tag the exception, not the default", so a
-// list of SomaFM streams stays clean and the rare YouTube entry
-// stands out.
+// stationKindIcon returns a small muted "· kind" tag (e.g. "· youtube"
+// or "· stream") next to the station name. Symmetric labeling lets
+// the user always see at a glance whether a station resolves through
+// the direct stream path or through mpv's ytdl_hook.
 //
 // Text rather than a Nerd Font glyph: the FA youtube codepoint
 // (U+F167) doesn't render reliably across Nerd Font variants, and a
 // plain word reads unambiguously on any terminal.
 func (m Model) stationKindIcon(s config.Station) string {
-	if s.EffectiveKind() != config.KindYouTube {
+	kind := s.EffectiveKind()
+	if kind == "" {
 		return ""
 	}
-	return m.styles.SectionHeader.Render("· youtube")
+	return m.styles.SectionHeader.Render("· " + kind)
 }
 
 // statusBlock returns the leading status indicator for the now-playing
