@@ -185,3 +185,77 @@ func TestMixerDisabledForUnknownID(t *testing.T) {
 		t.Error("Disabled(unknown) returned true; expected false (treat unknown as not-disabled)")
 	}
 }
+
+func TestMixerSetVolumeSkippedWhenDisabled(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	// Tests run on systems with or without mpv. Either way, SetVolume
+	// must not error: disabled channels silently no-op, working
+	// channels accept the volume.
+	for _, id := range m.ChannelIDs() {
+		if err := m.SetVolume(id, 50); err != nil {
+			t.Errorf("SetVolume(%s): %v", id, err)
+		}
+		if got := m.Volume(id); got != 50 {
+			t.Errorf("Volume(%s) after SetVolume(50): got %d, want 50", id, got)
+		}
+	}
+}
+
+func TestMixerSetVolumeUnknownChannel(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	if err := m.SetVolume("does_not_exist", 50); err == nil {
+		t.Error("SetVolume(unknown): nil error, want error")
+	}
+}
+
+func TestMixerSetVolumeClamps(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	if err := m.SetVolume("rain", 200); err != nil {
+		t.Fatalf("SetVolume(200): %v", err)
+	}
+	if got := m.Volume("rain"); got != 100 {
+		t.Errorf("clamp high: got %d, want 100", got)
+	}
+	if err := m.SetVolume("rain", -10); err != nil {
+		t.Fatalf("SetVolume(-10): %v", err)
+	}
+	if got := m.Volume("rain"); got != 0 {
+		t.Errorf("clamp low: got %d, want 0", got)
+	}
+}
+
+func TestMixerVolumeDefaultZero(t *testing.T) {
+	withCacheDir(t, t.TempDir())
+	m := NewAmbientMixer()
+	if err := m.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer m.Close()
+
+	for _, id := range m.ChannelIDs() {
+		if got := m.Volume(id); got != 0 {
+			t.Errorf("default Volume(%s): got %d, want 0", id, got)
+		}
+	}
+	if got := m.Volume("does_not_exist"); got != 0 {
+		t.Errorf("Volume(unknown): got %d, want 0", got)
+	}
+}

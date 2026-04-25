@@ -33,10 +33,13 @@ var ambientChannels = []AmbientChannel{
 
 type runtimeChannel struct {
 	meta     AmbientChannel
+	volume   int
 	filePath string
 	player   *ambientPlayer
 	disabled bool
 }
+
+var errUnknownChannel = errors.New("unknown ambient channel")
 
 type AmbientMixer struct {
 	channels []AmbientChannel
@@ -152,6 +155,41 @@ func (m *AmbientMixer) Disabled(id string) bool {
 		}
 	}
 	return false
+}
+
+func (m *AmbientMixer) SetVolume(id string, v int) error {
+	rc := m.find(id)
+	if rc == nil {
+		return errUnknownChannel
+	}
+	v = clampVolume(v)
+	rc.volume = v
+	if rc.disabled || rc.player == nil {
+		return nil
+	}
+	if err := rc.player.setVolume(v); err != nil {
+		return fmt.Errorf("set %s volume: %w", id, err)
+	}
+	if err := rc.player.setPaused(v == 0); err != nil {
+		return fmt.Errorf("set %s pause: %w", id, err)
+	}
+	return nil
+}
+
+func (m *AmbientMixer) Volume(id string) int {
+	if rc := m.find(id); rc != nil {
+		return rc.volume
+	}
+	return 0
+}
+
+func (m *AmbientMixer) find(id string) *runtimeChannel {
+	for _, rc := range m.runtime {
+		if rc != nil && rc.meta.ID == id {
+			return rc
+		}
+	}
+	return nil
 }
 
 func (m *AmbientMixer) cacheDir() (string, error) {
