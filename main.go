@@ -75,6 +75,22 @@ func run() error {
 	defer player.Close()
 
 	mixer := audio.NewAmbientMixer()
+	if err := mixer.Init(); err != nil {
+		// Init failure is non-fatal: the main station keeps working,
+		// the mixer modal just renders its rows as 'unavailable'.
+		fmt.Fprintf(os.Stderr, "lofi-player: ambient mixer init failed: %v\n", err)
+	} else {
+		for id, v := range st.Ambient {
+			_ = mixer.SetVolume(id, v)
+		}
+	}
+	defer mixer.Close()
+
+	opts.SaveAmbient = func(snap map[string]int) error {
+		current := state.Load()
+		current.Ambient = snap
+		return state.Save(current)
+	}
 
 	p := tea.NewProgram(tui.NewModel(cfg, player, mixer, opts), tea.WithAltScreen())
 	finalModel, err := p.Run()
@@ -89,6 +105,7 @@ func run() error {
 			Theme:           m.ThemeName(),
 			Volume:          m.Volume(),
 			LastStationName: m.LastStationName(),
+			Ambient:         mixer.Volumes(),
 		}
 		if err := state.Save(next); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: state save failed: %v\n", err)
