@@ -13,3 +13,14 @@ type mixerModel struct {
 func newMixerModel(am *audio.AmbientMixer) mixerModel {
 	return mixerModel{mixer: am}
 }
+
+func (m mixerModel) Selected() string {
+	if m.mixer == nil {
+		return ""
+	}
+	ids := m.mixer.ChannelIDs()
+	if m.selected < 0 || m.selected >= len(ids) {
+		return ""
+	}
+	return ids[m.selected]
+}
