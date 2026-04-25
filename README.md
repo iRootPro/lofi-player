@@ -87,6 +87,15 @@ on first run with sensible defaults — no manual setup needed. A
 documented example lives at
 [`configs/lofi-player.example.yaml`](configs/lofi-player.example.yaml).
 
+Want more stations? A ready-made preset of ~200 stations from
+[radiopotok.ru](https://radiopotok.ru) (chillout / jazz / classical /
+trance) is bundled at
+[`configs/radiopotok.yaml`](configs/radiopotok.yaml) — copy any
+entries from its `stations:` list into your own `config.yaml`.
+Regenerate from upstream with `./scripts/fetch-radiopotok.py`. About
+~20% of these third-party streams may be intermittently down at any
+given moment — pick another if one fails.
+
 ```yaml
 theme: tokyo-night
 volume: 60
@@ -127,6 +136,9 @@ internal/
   tui/                       Bubble Tea model / update / view / keys / styles / mini / toast / anim
 configs/
   lofi-player.example.yaml   documented example config
+  radiopotok.yaml            ~200-station preset scraped from radiopotok.ru
+scripts/
+  fetch-radiopotok.py        regenerates configs/radiopotok.yaml
 plans/
   lofi-player-plan.md        the roadmap (single source of truth)
   lofi-player-preview.html   Tokyo-Night visual reference
