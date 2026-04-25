@@ -82,6 +82,30 @@ func TestTranslateOne_MediaTitleFallback(t *testing.T) {
 	}
 }
 
+func TestTranslateOne_MediaTitleURLLikeIgnored(t *testing.T) {
+	p := &Player{}
+	cases := []string{
+		"watch?v=jfKfPfyJRdk",
+		"https://example.com/stream.mp3",
+		"http://radio.example.com",
+		"rtmp://live.example.com/app",
+		"https://www.youtube.com/watch?v=xyz",
+	}
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			payload, _ := json.Marshal(raw)
+			evt := p.translateOne(ipcEvent{
+				Event: "property-change",
+				Name:  "media-title",
+				Data:  payload,
+			})
+			if evt != nil {
+				t.Errorf("URL-like media-title %q produced %v, want nil (suppressed)", raw, evt)
+			}
+		})
+	}
+}
+
 func TestTranslateOne_MediaTitleSuppressedWhenArtistKnown(t *testing.T) {
 	p := &Player{lastTitle: "Track", lastArtist: "Artist"}
 	raw := ipcEvent{

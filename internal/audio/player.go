@@ -322,9 +322,12 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 	case "media-title":
 		// media-title is the fallback when no ICY metadata is present.
 		// Only treat it as a title if the metadata channel hasn't already
-		// produced an artist (which would mean we have richer info).
+		// produced an artist (which would mean we have richer info), and
+		// the value isn't an obvious URL fragment — mpv/ytdl_hook briefly
+		// reports the URL tail as media-title before the real video title
+		// resolves, and "watch?v=jfKfPfyJRdk" is not what we want to show.
 		var title string
-		if err := json.Unmarshal(raw.Data, &title); err == nil && title != "" {
+		if err := json.Unmarshal(raw.Data, &title); err == nil && title != "" && !looksLikeURLFragment(title) {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			if p.lastArtist == "" && title != p.lastTitle {
@@ -334,6 +337,24 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 		}
 	}
 	return nil
+}
+
+// looksLikeURLFragment returns true for strings that look like raw
+// URLs or query fragments rather than human-readable titles. The TUI
+// keeps showing its "…" placeholder while these surface, instead of
+// flashing them at the user.
+func looksLikeURLFragment(s string) bool {
+	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+		return true
+	}
+	if strings.Contains(s, "://") {
+		return true
+	}
+	// "watch?v=..." (YouTube), "v?id=..." and similar bare query forms.
+	if strings.Contains(s, "?v=") || strings.Contains(s, "?id=") {
+		return true
+	}
+	return false
 }
 
 func (p *Player) maybeMetadata(title, artist string) Event {
