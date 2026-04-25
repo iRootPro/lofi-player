@@ -168,19 +168,20 @@ func (m Model) renderNowPlaying() string {
 	return stationLine + "\n" + trackLine
 }
 
-// stationKindIcon returns a tiny muted "· yt" tag for YouTube-kind
-// stations. Stream (the default) and unknown kinds get no marker —
-// the rule is "tag the exception, not the default", so a list of
-// SomaFM streams stays clean and the rare YouTube entry stands out.
+// stationKindIcon returns a tiny muted "· youtube" tag for YouTube-
+// kind stations. Stream (the default) and unknown kinds get no
+// marker — the rule is "tag the exception, not the default", so a
+// list of SomaFM streams stays clean and the rare YouTube entry
+// stands out.
 //
 // Text rather than a Nerd Font glyph: the FA youtube codepoint
 // (U+F167) doesn't render reliably across Nerd Font variants, and a
-// 2-char "yt" is unambiguous on any terminal.
+// plain word reads unambiguously on any terminal.
 func (m Model) stationKindIcon(s config.Station) string {
 	if s.EffectiveKind() != config.KindYouTube {
 		return ""
 	}
-	return m.styles.SectionHeader.Render("· yt")
+	return m.styles.SectionHeader.Render("· youtube")
 }
 
 // statusBlock returns the leading status indicator for the now-playing
