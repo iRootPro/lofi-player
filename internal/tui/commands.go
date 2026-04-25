@@ -87,3 +87,15 @@ func clearToastAfter() tea.Cmd {
 		return clearToastMsg{}
 	})
 }
+
+// pulseInterval controls the live-indicator pulse cadence. A long
+// half-period (700 ms) reads as a calm "alive" signal rather than a
+// distracting blink.
+const pulseInterval = 700 * time.Millisecond
+
+// pulseTick schedules the next pulseTickMsg.
+func pulseTick() tea.Cmd {
+	return tea.Tick(pulseInterval, func(time.Time) tea.Msg {
+		return pulseTickMsg{}
+	})
+}

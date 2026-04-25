@@ -80,6 +80,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case pulseTickMsg:
+		m.pulseDim = !m.pulseDim
+		return m, pulseTick()
 	}
 	return m, nil
 }

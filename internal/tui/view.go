@@ -166,13 +166,19 @@ func (m Model) renderNowPlaying() string {
 // statusBlock returns the leading status indicator for the now-playing
 // card and the playing-station row in the list. While the player is
 // waiting for the first PlaybackStarted event after a Play call, it
-// renders the spinner instead of the ●/◯ glyph.
+// renders the spinner instead of the ●/◯ glyph. While playing, the
+// live ● gets a soft heartbeat via the SGR Faint attribute toggled
+// by the pulse tick — calm signal that audio is alive.
 func (m Model) statusBlock() string {
 	switch {
 	case m.loading:
 		return m.spinner.View()
 	case m.playing:
-		return m.styles.StatusLive.Render(statusGlyphLive)
+		style := m.styles.StatusLive
+		if m.pulseDim {
+			style = style.Faint(true)
+		}
+		return style.Render(statusGlyphLive)
 	default:
 		return m.styles.StatusPaused.Render(statusGlyphPaused)
 	}

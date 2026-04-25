@@ -78,6 +78,12 @@ type Model struct {
 	// globally; the renderer only consults it when loading is true.
 	spinner spinner.Model
 
+	// pulseDim alternates every pulseInterval to give the live ●
+	// indicator a soft heartbeat while a station is playing. The renderer
+	// only consults it when playing && !loading; the tick runs globally
+	// and is cheap.
+	pulseDim bool
+
 	autoplayURL string
 
 	width, height int
@@ -140,11 +146,11 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 }
 
 // Init starts the long-lived event subscription that bridges audio
-// events into the Update loop, plus the buffering spinner's tick loop.
-// If the model was constructed with an AutoplayStation, the
-// corresponding playCmd is also dispatched.
+// events into the Update loop, plus the buffering spinner and live-
+// indicator pulse tick loops. If the model was constructed with an
+// AutoplayStation, the corresponding playCmd is also dispatched.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick}
+	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick()}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
 	}

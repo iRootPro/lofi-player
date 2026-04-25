@@ -30,3 +30,7 @@ type EOFMsg struct{}
 // clearToastMsg is delivered by a delayed tea.Tick to wipe an active
 // Toast after its lifetime expires.
 type clearToastMsg struct{}
+
+// pulseTickMsg toggles the live indicator's brightness for a soft
+// "alive" pulse while a station is actively playing.
+type pulseTickMsg struct{}
