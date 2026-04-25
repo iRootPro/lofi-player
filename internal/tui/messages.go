@@ -27,5 +27,6 @@ type PlaybackErrorMsg struct {
 // happens when the server shuts down.
 type EOFMsg struct{}
 
-// clearErrorMsg is delivered by a delayed tea.Tick to wipe lastError.
-type clearErrorMsg struct{}
+// clearToastMsg is delivered by a delayed tea.Tick to wipe an active
+// Toast after its lifetime expires.
+type clearToastMsg struct{}

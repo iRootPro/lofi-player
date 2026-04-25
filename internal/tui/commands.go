@@ -8,11 +8,9 @@ import (
 	"github.com/iRootPro/lofi-player/internal/audio"
 )
 
-// errorClearAfter is the lifetime of a transient PlaybackError shown in
-// the help-bar slot. Phase 2 will replace this with a proper Toast
-// component; for Phase 1 it's just a delayed Tick that clears
-// Model.lastError.
-const errorClearAfter = 3 * time.Second
+// toastLifetime is how long a Toast stays visible before a delayed Tick
+// dismisses it.
+const toastLifetime = 3 * time.Second
 
 // playCmd starts (or replaces) playback of url. A nil result means the
 // command succeeded and the actual "started playing" signal will arrive
@@ -83,9 +81,9 @@ func waitForEvent(p *audio.Player) tea.Cmd {
 	}
 }
 
-// clearErrorAfter schedules a clearErrorMsg after errorClearAfter.
-func clearErrorAfter() tea.Cmd {
-	return tea.Tick(errorClearAfter, func(time.Time) tea.Msg {
-		return clearErrorMsg{}
+// clearToastAfter schedules a clearToastMsg after toastLifetime.
+func clearToastAfter() tea.Cmd {
+	return tea.Tick(toastLifetime, func(time.Time) tea.Msg {
+		return clearToastMsg{}
 	})
 }

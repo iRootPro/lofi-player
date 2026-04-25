@@ -56,6 +56,61 @@ func TokyoNight() Theme {
 	}
 }
 
+// CatppuccinMocha returns the Catppuccin Mocha palette
+// (https://github.com/catppuccin/catppuccin).
+func CatppuccinMocha() Theme {
+	return Theme{
+		Name:       "catppuccin-mocha",
+		Background: lipgloss.Color("#1e1e2e"), // Base
+		Foreground: lipgloss.Color("#cdd6f4"), // Text
+		Muted:      lipgloss.Color("#6c7086"), // Overlay0
+		Subtle:     lipgloss.Color("#585b70"), // Surface2
+		Primary:    lipgloss.Color("#cba6f7"), // Mauve
+		Secondary:  lipgloss.Color("#89b4fa"), // Blue
+		Accent:     lipgloss.Color("#f5c2e7"), // Pink
+		Success:    lipgloss.Color("#a6e3a1"), // Green
+		Warning:    lipgloss.Color("#f9e2af"), // Yellow
+		Info:       lipgloss.Color("#89dceb"), // Sky
+	}
+}
+
+// GruvboxDark returns the Gruvbox Dark palette
+// (https://github.com/morhetz/gruvbox), bright variants for accent colors.
+func GruvboxDark() Theme {
+	return Theme{
+		Name:       "gruvbox-dark",
+		Background: lipgloss.Color("#282828"), // bg0
+		Foreground: lipgloss.Color("#ebdbb2"), // fg1
+		Muted:      lipgloss.Color("#928374"), // gray
+		Subtle:     lipgloss.Color("#504945"), // bg2
+		Primary:    lipgloss.Color("#d3869b"), // bright_purple
+		Secondary:  lipgloss.Color("#83a598"), // bright_blue
+		Accent:     lipgloss.Color("#fb4934"), // bright_red
+		Success:    lipgloss.Color("#b8bb26"), // bright_green
+		Warning:    lipgloss.Color("#fabd2f"), // bright_yellow
+		Info:       lipgloss.Color("#8ec07c"), // bright_aqua
+	}
+}
+
+// RosePine returns the Rose Pine palette (https://rosepinetheme.com/).
+// Rose Pine is a cool palette with no true green; Pine (teal) substitutes
+// for the Success role.
+func RosePine() Theme {
+	return Theme{
+		Name:       "rose-pine",
+		Background: lipgloss.Color("#191724"), // Base
+		Foreground: lipgloss.Color("#e0def4"), // Text
+		Muted:      lipgloss.Color("#6e6a86"), // Muted
+		Subtle:     lipgloss.Color("#1f1d2e"), // Surface
+		Primary:    lipgloss.Color("#c4a7e7"), // Iris
+		Secondary:  lipgloss.Color("#9ccfd8"), // Foam
+		Accent:     lipgloss.Color("#ebbcba"), // Rose
+		Success:    lipgloss.Color("#31748f"), // Pine
+		Warning:    lipgloss.Color("#f6c177"), // Gold
+		Info:       lipgloss.Color("#eb6f92"), // Love
+	}
+}
+
 // Lookup returns the theme registered under name. If name is empty or
 // unknown, Lookup returns Tokyo Night and false; otherwise it returns the
 // matched theme and true. Callers can use the bool to warn the user when
@@ -67,8 +122,36 @@ func Lookup(name string) (Theme, bool) {
 	return TokyoNight(), false
 }
 
-// registry maps theme names to constructors. Phase 0 only ships Tokyo Night;
-// Phase 2 adds catppuccin-mocha, gruvbox-dark, and rose-pine.
+// Names returns all registered theme names in stable order — Tokyo Night
+// first (the default), then the rest alphabetically. Callers use this to
+// drive the t-cycle binding in the TUI.
+func Names() []string {
+	return []string{
+		"tokyo-night",
+		"catppuccin-mocha",
+		"gruvbox-dark",
+		"rose-pine",
+	}
+}
+
+// Next returns the theme name that follows current in the cycle order
+// from Names(). Wraps around at the end. Unknown current returns the
+// first name.
+func Next(current string) string {
+	names := Names()
+	for i, n := range names {
+		if n == current {
+			return names[(i+1)%len(names)]
+		}
+	}
+	return names[0]
+}
+
+// registry maps theme names to constructors. Phase 0 shipped only Tokyo
+// Night; Phase 2 adds catppuccin-mocha, gruvbox-dark, and rose-pine.
 var registry = map[string]func() Theme{
-	"tokyo-night": TokyoNight,
+	"tokyo-night":      TokyoNight,
+	"catppuccin-mocha": CatppuccinMocha,
+	"gruvbox-dark":     GruvboxDark,
+	"rose-pine":        RosePine,
 }

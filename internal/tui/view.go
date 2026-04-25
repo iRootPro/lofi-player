@@ -22,7 +22,13 @@ func (m Model) View() string {
 	if m.width == 0 {
 		return ""
 	}
+	if m.mode == modeMini {
+		return m.viewMini()
+	}
+	return m.viewFull()
+}
 
+func (m Model) viewFull() string {
 	var b strings.Builder
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n\n")
@@ -36,7 +42,30 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderSeparator())
 	b.WriteString("\n")
-	b.WriteString(m.renderHelpOrError())
+	b.WriteString(m.renderHelpOrToast())
+	return b.String()
+}
+
+// viewMini renders the 6-line compact layout from plan §5.1, suitable
+// for living in a tmux split corner. Stations list, separator, and full
+// help are dropped; everything else stays.
+func (m Model) viewMini() string {
+	var b strings.Builder
+	b.WriteString(m.renderHeader())
+	b.WriteString("\n")
+	b.WriteString(m.renderNowPlaying())
+	b.WriteString("\n")
+	b.WriteString(m.renderProgress())
+	b.WriteString("\n")
+	b.WriteString(m.renderVolume())
+	b.WriteString("\n")
+	if m.toast != nil {
+		b.WriteString(m.renderToast())
+	} else {
+		parts := renderBindings(m.styles, m.keys.MiniShortHelp())
+		sep := m.styles.HelpSep.Render("  ·  ")
+		b.WriteString(leftPad + strings.Join(parts, sep))
+	}
 	return b.String()
 }
 
@@ -106,7 +135,14 @@ func (m Model) renderProgress() string {
 }
 
 func (m Model) renderVolume() string {
-	fill := m.volume * volumeWidth / 100
+	displayed := m.volumeDisplayed
+	if displayed < 0 {
+		displayed = 0
+	}
+	if displayed > 100 {
+		displayed = 100
+	}
+	fill := int(displayed * volumeWidth / 100)
 	if fill < 0 {
 		fill = 0
 	}
@@ -165,14 +201,23 @@ func (m Model) renderSeparator() string {
 	return leftPad + m.styles.Separator.Render(strings.Repeat("─", width))
 }
 
-func (m Model) renderHelpOrError() string {
-	if m.lastError != "" {
-		return leftPad + m.styles.StationCursor.Render("error: ") + m.styles.HelpDesc.Render(m.lastError)
+func (m Model) renderHelpOrToast() string {
+	if m.toast != nil {
+		return m.renderToast()
 	}
 	if m.showFullHelp {
 		return m.renderFullHelp()
 	}
 	return m.renderShortHelp()
+}
+
+func (m Model) renderToast() string {
+	t := m.toast
+	out := leftPad
+	if label := t.label(); label != "" {
+		out += t.labelStyle(m.styles).Render(label)
+	}
+	return out + m.styles.HelpDesc.Render(t.Message)
 }
 
 func (m Model) renderShortHelp() string {
@@ -184,25 +229,37 @@ func (m Model) renderShortHelp() string {
 func (m Model) renderFullHelp() string {
 	groups := m.keys.FullHelp()
 	labels := []string{"navigation", "playback", "app"}
-	var b strings.Builder
+
+	var inner strings.Builder
 	for i, g := range groups {
 		if i > 0 {
-			b.WriteString("\n")
+			inner.WriteString("\n\n")
 		}
 		if i < len(labels) {
-			b.WriteString(leftPad + m.styles.HelpGroup.Render(labels[i]) + "\n")
+			inner.WriteString(m.styles.HelpGroup.Render(labels[i]))
+			inner.WriteString("\n")
 		}
-		for _, binding := range g {
+		for j, binding := range g {
 			h := binding.Help()
 			if h.Key == "" || h.Desc == "" {
 				continue
 			}
-			b.WriteString(leftPad + "  " +
+			if j > 0 {
+				inner.WriteString("\n")
+			}
+			inner.WriteString("  " +
 				m.styles.HelpKey.Render(fmt.Sprintf("%-7s", h.Key)) +
-				m.styles.HelpDesc.Render(h.Desc) + "\n")
+				m.styles.HelpDesc.Render(h.Desc))
 		}
 	}
-	return b.String()
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(1, 3).
+		Render(inner.String())
+
+	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
 }
 
 func renderBindings(s Styles, bindings []key.Binding) []string {

@@ -24,7 +24,7 @@ func fixture() Model {
 			{Name: "C", URL: "http://c"},
 		},
 	}
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, nil, Options{AutoplayStation: -1})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return updated.(Model)
 }
@@ -64,7 +64,7 @@ func TestView_RendersWhenSized(t *testing.T) {
 }
 
 func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
-	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil)
+	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, Options{AutoplayStation: -1})
 	if got := m.View(); got != "" {
 		t.Errorf("View() should be empty before WindowSizeMsg, got %q", got)
 	}

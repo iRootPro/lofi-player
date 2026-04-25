@@ -3,6 +3,8 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
 const volumeStep = 5
@@ -33,11 +35,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.player)
 
 	case PlaybackErrorMsg:
-		m.lastError = msg.Err.Error()
+		m.toast = &Toast{Message: msg.Err.Error(), Kind: ToastError}
 		m.playing = false
 		m.playingIdx = -1
 		m.currentTrack = Track{}
-		return m, tea.Batch(clearErrorAfter(), waitForEvent(m.player))
+		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
 	case EOFMsg:
 		m.playing = false
@@ -45,9 +47,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentTrack = Track{}
 		return m, waitForEvent(m.player)
 
-	case clearErrorMsg:
-		m.lastError = ""
+	case clearToastMsg:
+		m.toast = nil
 		return m, nil
+
+	case volTickMsg:
+		next, vel, settled := stepVolume(m.volumeDisplayed, m.volumeVelocity, float64(m.volume))
+		m.volumeDisplayed = next
+		m.volumeVelocity = vel
+		if settled {
+			m.volumeAnimating = false
+			return m, nil
+		}
+		return m, tickVolAnim()
 	}
 	return m, nil
 }
@@ -74,17 +86,42 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.VolUp):
 		m.volume = clampVolume(m.volume + volumeStep)
-		return m, setVolumeCmd(m.player, m.volume)
+		return m, m.startVolumeAnim(setVolumeCmd(m.player, m.volume))
 
 	case key.Matches(msg, m.keys.VolDown):
 		m.volume = clampVolume(m.volume - volumeStep)
-		return m, setVolumeCmd(m.player, m.volume)
+		return m, m.startVolumeAnim(setVolumeCmd(m.player, m.volume))
+
+	case key.Matches(msg, m.keys.ThemeCycle):
+		next, _ := theme.Lookup(theme.Next(m.theme.Name))
+		m.theme = next
+		m.styles = NewStyles(next)
+		return m, nil
+
+	case key.Matches(msg, m.keys.Mini):
+		if m.mode == modeFull {
+			m.mode = modeMini
+		} else {
+			m.mode = modeFull
+		}
+		return m, nil
 
 	case key.Matches(msg, m.keys.Help):
 		m.showFullHelp = !m.showFullHelp
 		return m, nil
 	}
 	return m, nil
+}
+
+// startVolumeAnim returns a Cmd that batches the player update with
+// the spring tick (only if not already animating, so spamming the key
+// doesn't pile up overlapping tick loops).
+func (m *Model) startVolumeAnim(playerCmd tea.Cmd) tea.Cmd {
+	if m.volumeAnimating {
+		return playerCmd
+	}
+	m.volumeAnimating = true
+	return tea.Batch(playerCmd, tickVolAnim())
 }
 
 // togglePlayPause is the meat of the space binding. State update is
