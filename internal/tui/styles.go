@@ -51,8 +51,12 @@ func NewStyles(t theme.Theme) Styles {
 		StatusPaused:   muted,
 		VolLabel:       muted,
 		VolFill:        lipgloss.NewStyle().Foreground(t.Primary),
-		VolEmpty:       lipgloss.NewStyle().Foreground(t.Subtle),
-		VolPercent:     lipgloss.NewStyle().Foreground(t.Info),
+		// VolEmpty is the placeholder track behind the fill cells.
+		// Muted (lighter than Subtle) keeps the empty segments visible
+		// against the dark background so the bar reads as "fill on a
+		// rail" rather than disappearing into negative space.
+		VolEmpty:   lipgloss.NewStyle().Foreground(t.Muted),
+		VolPercent: lipgloss.NewStyle().Foreground(t.Info),
 		SectionHeader:  muted,
 		StationItem:    lipgloss.NewStyle().Foreground(t.Foreground),
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),

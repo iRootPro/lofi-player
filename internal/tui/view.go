@@ -277,9 +277,12 @@ func (m Model) renderVolume() string {
 	}
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
+	// Percent is computed from `displayed` (the spring-animated value)
+	// so the digit ticks in lockstep with the bar instead of jumping
+	// straight to the target while the bar is still catching up.
 	return m.styles.VolLabel.Render(iconVolume) + "  " +
 		bar + "  " +
-		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", m.volume))
+		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", int(displayed+0.5)))
 }
 
 func (m Model) renderStations() string {
