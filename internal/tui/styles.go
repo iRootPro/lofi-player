@@ -16,13 +16,11 @@ type Styles struct {
 	StationName    lipgloss.Style
 	StatusLive     lipgloss.Style
 	StatusPaused   lipgloss.Style
-	ProgressFill   lipgloss.Style
-	ProgressEmpty  lipgloss.Style
-	ProgressLabel  lipgloss.Style
 	VolLabel       lipgloss.Style
 	VolFill        lipgloss.Style
 	VolEmpty       lipgloss.Style
 	VolPercent     lipgloss.Style
+	StreakEmpty    lipgloss.Style
 	SectionHeader  lipgloss.Style
 	StationItem    lipgloss.Style
 	StationCursor  lipgloss.Style
@@ -46,13 +44,15 @@ func NewStyles(t theme.Theme) Styles {
 		StationName:    lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
 		StatusLive:     lipgloss.NewStyle().Foreground(t.Success),
 		StatusPaused:   muted,
-		ProgressFill:   lipgloss.NewStyle().Foreground(t.Success),
-		ProgressEmpty:  lipgloss.NewStyle().Foreground(t.Subtle),
-		ProgressLabel:  lipgloss.NewStyle().Foreground(t.Info),
 		VolLabel:       muted,
 		VolFill:        lipgloss.NewStyle().Foreground(t.Primary),
 		VolEmpty:       lipgloss.NewStyle().Foreground(t.Subtle),
 		VolPercent:     lipgloss.NewStyle().Foreground(t.Info),
+		// StreakEmpty uses Muted (a lighter tone than VolEmpty's Subtle)
+		// so the empty cells of the streak bar are visible against the
+		// dark background. The volume bar keeps Subtle because its
+		// spring-animated fill needs a darker contrast partner.
+		StreakEmpty: muted,
 		SectionHeader:  muted,
 		StationItem:    lipgloss.NewStyle().Foreground(t.Foreground),
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),

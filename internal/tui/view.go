@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	leftPad       = "  "
-	progressWidth = 16
-	volumeWidth   = 10
+	leftPad     = "  "
+	volumeWidth = 10
 
 	// twoColMinWidth is the smallest terminal width at which the
 	// stations + pomodoro/today panels appear side by side. Below this
@@ -63,8 +62,6 @@ func (m Model) viewFull() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n\n")
-	b.WriteString(m.renderProgress())
-	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderMainArea())
@@ -75,40 +72,55 @@ func (m Model) viewFull() string {
 	return b.String()
 }
 
-// renderMainArea returns the stations-list block with pomodoro/today
-// side panels attached when either the timer is active or persisted
-// stats are non-empty. Narrow terminals fall back to vertically
-// stacking the panels under the stations list.
+// renderMainArea returns the stations-list block with pomodoro / today
+// side panels arranged for the current session state.
+//
+// Three layout cases:
+//   - active pomodoro session: two-column layout (stations | pomodoro
+//     panel + today panel), or vertically stacked on narrow terminals.
+//     The screen "opens up" when a focus session is running.
+//   - idle session but stats accumulated today: stations full-width,
+//     with a single muted summary line under them ("today · listened
+//     2h 14m · streak ▰▰▱▱▱▱▱"). Avoids the orphan-panel look.
+//   - idle session and no stats: stations only, full-width.
 func (m Model) renderMainArea() string {
 	stations := m.renderStations()
-	if !m.hasPomodoroSurface() {
+	switch {
+	case m.session.Phase != pomodoro.PhaseIdle:
+		right := m.renderRightColumn()
+		if m.width < twoColMinWidth {
+			return stations + "\n\n" + right
+		}
+		return lipgloss.JoinHorizontal(lipgloss.Top, stations, "    ", right)
+	case m.stats.ListenedToday > 0 || m.stats.Streak > 0:
+		return stations + "\n\n" + m.renderTodayCompact()
+	default:
 		return stations
 	}
-	right := m.renderRightColumn()
-	if m.width < twoColMinWidth {
-		return stations + "\n\n" + right
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, stations, "    ", right)
-}
-
-// hasPomodoroSurface reports whether the pomodoro/today panels should
-// be rendered at all. When false, stations gets the full width.
-func (m Model) hasPomodoroSurface() bool {
-	return m.session.Phase != pomodoro.PhaseIdle || m.stats.ListenedToday > 0 || m.stats.Streak > 0
 }
 
 func (m Model) renderRightColumn() string {
 	var b strings.Builder
-	if m.session.Phase != pomodoro.PhaseIdle {
-		b.WriteString(m.renderPomodoroBlock())
-	}
+	b.WriteString(m.renderPomodoroBlock())
 	if m.stats.ListenedToday > 0 || m.stats.Streak > 0 {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
+		b.WriteString("\n\n")
 		b.WriteString(m.renderTodayBlock())
 	}
 	return b.String()
+}
+
+// renderTodayCompact is the single-line summary shown under the
+// stations list when a pomodoro isn't active but the user has stats
+// for today — gives presence without claiming the right column.
+func (m Model) renderTodayCompact() string {
+	parts := []string{m.styles.SectionHeader.Render("today")}
+	parts = append(parts, m.styles.HelpDesc.Render("listened ")+
+		m.styles.StationItem.Render(formatListened(m.stats.ListenedToday)))
+	if m.stats.Streak > 0 {
+		parts = append(parts, m.styles.HelpDesc.Render("streak ")+
+			m.renderStreakBar(m.stats.Streak))
+	}
+	return leftPad + strings.Join(parts, m.styles.HelpSep.Render("  ·  "))
 }
 
 func (m Model) renderPomodoroBlock() string {
@@ -126,13 +138,11 @@ func (m Model) renderPomodoroBlock() string {
 	b.WriteString("\n")
 	phaseLabel := m.session.Phase.String()
 	timeLabel := fmt.Sprintf("%02d:%02d", mm, ss)
-	b.WriteString(fmt.Sprintf("%-10s%s",
-		m.styles.HelpDesc.Render(phaseLabel),
-		m.styles.StatusLive.Render(timeLabel)))
+	b.WriteString(padToWidth(m.styles.HelpDesc.Render(phaseLabel), 10))
+	b.WriteString(m.styles.StatusLive.Render(timeLabel))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%-10s%s",
-		m.styles.HelpDesc.Render("round"),
-		m.styles.HelpKey.Render(fmt.Sprintf("%d / %d", round, cycle))))
+	b.WriteString(padToWidth(m.styles.HelpDesc.Render("round"), 10))
+	b.WriteString(m.styles.HelpKey.Render(fmt.Sprintf("%d / %d", round, cycle)))
 	return b.String()
 }
 
@@ -140,13 +150,11 @@ func (m Model) renderTodayBlock() string {
 	var b strings.Builder
 	b.WriteString(m.styles.SectionHeader.Render("─── today ───"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%-10s%s",
-		m.styles.HelpDesc.Render("listened"),
-		m.styles.StationItem.Render(formatListened(m.stats.ListenedToday))))
+	b.WriteString(padToWidth(m.styles.HelpDesc.Render("listened"), 10))
+	b.WriteString(m.styles.StationItem.Render(formatListened(m.stats.ListenedToday)))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("%-10s%s",
-		m.styles.HelpDesc.Render("streak"),
-		m.renderStreakBar(m.stats.Streak)))
+	b.WriteString(padToWidth(m.styles.HelpDesc.Render("streak"), 10))
+	b.WriteString(m.renderStreakBar(m.stats.Streak))
 	return b.String()
 }
 
@@ -159,12 +167,24 @@ func (m Model) renderStreakBar(streak int) string {
 		fill = streakBarWidth
 	}
 	filled := m.styles.StatusLive.Render(strings.Repeat("▰", fill))
-	empty := m.styles.VolEmpty.Render(strings.Repeat("▱", streakBarWidth-fill))
+	empty := m.styles.StreakEmpty.Render(strings.Repeat("▱", streakBarWidth-fill))
 	suffix := ""
 	if streak > streakBarWidth {
 		suffix = " " + m.styles.HelpDesc.Render(fmt.Sprintf("+%d", streak-streakBarWidth))
 	}
 	return filled + empty + suffix
+}
+
+// padToWidth right-pads s with spaces until its visible (non-ANSI)
+// width equals w. Used for column alignment in panels with styled
+// labels — fmt's %-Ns counts ANSI escape bytes toward width and so
+// over-pads (i.e. doesn't pad) styled strings.
+func padToWidth(s string, w int) string {
+	n := w - lipgloss.Width(s)
+	if n <= 0 {
+		return s
+	}
+	return s + strings.Repeat(" ", n)
 }
 
 // formatListened renders a duration as "Xh Ym" / "Ym" / "<1m". Seconds
@@ -182,16 +202,15 @@ func formatListened(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
-// viewMini renders the 6-line compact layout from plan §5.1, suitable
-// for living in a tmux split corner. Stations list, separator, and full
-// help are dropped; everything else stays.
+// viewMini renders the compact layout suitable for living in a tmux
+// split corner. Stations list, separator, and full help are dropped;
+// the bogus stream "progress bar" is dropped too — Phase 4b will
+// re-enable it for local files where duration actually exists.
 func (m Model) viewMini() string {
 	var b strings.Builder
 	b.WriteString(m.renderHeader())
 	b.WriteString("\n")
 	b.WriteString(m.renderNowPlaying())
-	b.WriteString("\n")
-	b.WriteString(m.renderProgress())
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
 	b.WriteString("\n")
@@ -229,18 +248,23 @@ func (m Model) renderNowPlaying() string {
 	}
 	dot := m.styles.SectionHeader.Render("  ·  ")
 
-	stationLine := leftPad + m.styles.StationName.Render(name) + dot + statusStyle.Render(status)
-	if track := m.formatTrack(); track != "" {
-		return stationLine + "\n" + leftPad + track
-	}
-	return stationLine
+	// formatTrack always returns a non-empty string when a station is
+	// active (it uses a muted "♪ …" placeholder while metadata is in
+	// flight), so the now-playing block stays two lines tall and
+	// doesn't bounce when the title arrives.
+	return leftPad + m.styles.StationName.Render(name) + dot + statusStyle.Render(status) +
+		"\n" + leftPad + m.formatTrack()
 }
 
+// formatTrack returns the second line of the now-playing block. When
+// metadata hasn't arrived yet (typical for the first ~2 s of a fresh
+// stream), it returns a muted "♪ …" placeholder so the now-playing
+// block doesn't visually collapse into a single line on station start.
 func (m Model) formatTrack() string {
-	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
-		return ""
-	}
 	mark := m.styles.StationPlaying.Render("♪") + " "
+	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
+		return mark + m.styles.Hint.Render("…")
+	}
 	switch {
 	case m.currentTrack.Artist != "" && m.currentTrack.Title != "":
 		return mark +
@@ -252,22 +276,6 @@ func (m Model) formatTrack() string {
 	default:
 		return mark + m.styles.HelpKey.Render(m.currentTrack.Artist)
 	}
-}
-
-func (m Model) renderProgress() string {
-	caption := "—"
-	if m.playingIdx >= 0 {
-		if m.playing {
-			caption = "live stream"
-		} else {
-			caption = "paused"
-		}
-	}
-	bar := m.styles.ProgressFill.Render(strings.Repeat("▰", progressWidth))
-	if m.playingIdx < 0 || !m.playing {
-		bar = m.styles.ProgressEmpty.Render(strings.Repeat("▱", progressWidth))
-	}
-	return leftPad + bar + "  " + m.styles.ProgressLabel.Render(caption)
 }
 
 func (m Model) renderVolume() string {
@@ -300,7 +308,9 @@ func (m Model) renderStations() string {
 	b.WriteString("\n")
 
 	if len(m.cfg.Stations) == 0 {
-		b.WriteString(leftPad + "  " + m.styles.Hint.Render("(no stations configured)"))
+		b.WriteString(leftPad + "  " +
+			m.styles.StationCursor.Render("press a") + " " +
+			m.styles.Hint.Render("to add one"))
 		b.WriteString("\n")
 	}
 
@@ -308,7 +318,9 @@ func (m Model) renderStations() string {
 		var prefix, name string
 		switch {
 		case i == m.cursor:
-			prefix = m.styles.StationCursor.Render("›") + " "
+			// Vertical bar reads as a clean left-edge accent —
+			// typographically calmer than the chevron used previously.
+			prefix = m.styles.StationCursor.Render("▎") + " "
 			name = m.styles.StationCursor.Render(s.Name)
 		case i == m.playingIdx:
 			prefix = "  "
