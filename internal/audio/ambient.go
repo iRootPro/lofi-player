@@ -111,27 +111,32 @@ func (m *AmbientMixer) materialize(dir string, c AmbientChannel) (string, error)
 			return target, nil
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
+		return "", fmt.Errorf("read existing %s: %w", target, err)
 	}
 
 	tmp, err := os.CreateTemp(dir, ".ambient-*.opus")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create temp in %s: %w", dir, err)
 	}
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
 	if _, err := io.Copy(tmp, bytes.NewReader(want)); err != nil {
 		_ = tmp.Close()
 		cleanup()
-		return "", err
+		return "", fmt.Errorf("copy %s: %w", c.ID, err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return "", fmt.Errorf("sync %s: %w", c.ID, err)
 	}
 	if err := tmp.Close(); err != nil {
 		cleanup()
-		return "", err
+		return "", fmt.Errorf("close temp: %w", err)
 	}
 	if err := os.Rename(tmpName, target); err != nil {
 		cleanup()
-		return "", err
+		return "", fmt.Errorf("rename %s: %w", target, err)
 	}
 	return target, nil
 }
