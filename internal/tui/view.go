@@ -36,7 +36,7 @@ func (m Model) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderSeparator())
 	b.WriteString("\n")
-	b.WriteString(m.renderHelp())
+	b.WriteString(m.renderHelpOrError())
 	return b.String()
 }
 
@@ -63,7 +63,30 @@ func (m Model) renderNowPlaying() string {
 		statusStyle = m.styles.StatusPaused
 	}
 	dot := m.styles.SectionHeader.Render("  ·  ")
-	return leftPad + m.styles.StationName.Render(name) + dot + statusStyle.Render(status)
+
+	stationLine := leftPad + m.styles.StationName.Render(name) + dot + statusStyle.Render(status)
+	if track := m.formatTrack(); track != "" {
+		return stationLine + "\n" + leftPad + track
+	}
+	return stationLine
+}
+
+func (m Model) formatTrack() string {
+	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
+		return ""
+	}
+	mark := m.styles.StationPlaying.Render("♪") + " "
+	switch {
+	case m.currentTrack.Artist != "" && m.currentTrack.Title != "":
+		return mark +
+			m.styles.StationItem.Render(m.currentTrack.Title) +
+			m.styles.SectionHeader.Render("  —  ") +
+			m.styles.HelpKey.Render(m.currentTrack.Artist)
+	case m.currentTrack.Title != "":
+		return mark + m.styles.StationItem.Render(m.currentTrack.Title)
+	default:
+		return mark + m.styles.HelpKey.Render(m.currentTrack.Artist)
+	}
 }
 
 func (m Model) renderProgress() string {
@@ -142,7 +165,10 @@ func (m Model) renderSeparator() string {
 	return leftPad + m.styles.Separator.Render(strings.Repeat("─", width))
 }
 
-func (m Model) renderHelp() string {
+func (m Model) renderHelpOrError() string {
+	if m.lastError != "" {
+		return leftPad + m.styles.StationCursor.Render("error: ") + m.styles.HelpDesc.Render(m.lastError)
+	}
 	if m.showFullHelp {
 		return m.renderFullHelp()
 	}

@@ -10,7 +10,10 @@ import (
 )
 
 // fixture returns a Model wired up with a real config and a sized window,
-// ready for keypress-driven assertions.
+// ready for keypress-driven assertions. The Player is intentionally nil:
+// these tests cover state transitions inside Update and never invoke the
+// tea.Cmd values returned alongside (which would otherwise call player
+// methods).
 func fixture() Model {
 	cfg := &config.Config{
 		Theme:  "tokyo-night",
@@ -21,7 +24,7 @@ func fixture() Model {
 			{Name: "C", URL: "http://c"},
 		},
 	}
-	m := NewModel(cfg)
+	m := NewModel(cfg, nil)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return updated.(Model)
 }
@@ -61,7 +64,7 @@ func TestView_RendersWhenSized(t *testing.T) {
 }
 
 func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
-	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}})
+	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil)
 	if got := m.View(); got != "" {
 		t.Errorf("View() should be empty before WindowSizeMsg, got %q", got)
 	}

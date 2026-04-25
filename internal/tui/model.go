@@ -3,9 +3,18 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
+
+// Track is the currently-playing title + artist as reported by mpv's
+// metadata stream. Both fields may be empty when no metadata is yet
+// available for the active station.
+type Track struct {
+	Title  string
+	Artist string
+}
 
 // Model is the root Bubble Tea model.
 //
@@ -14,6 +23,7 @@ import (
 // (plan §4.2).
 type Model struct {
 	cfg    *config.Config
+	player *audio.Player
 	theme  theme.Theme
 	styles Styles
 	keys   KeyMap
@@ -23,16 +33,21 @@ type Model struct {
 	playing    bool
 	volume     int
 
+	currentTrack Track
+	lastError    string
+
 	width, height int
 	showFullHelp  bool
 }
 
-// NewModel constructs the root model from a loaded config. If cfg.Theme
-// names an unknown theme, Tokyo Night is used.
-func NewModel(cfg *config.Config) Model {
+// NewModel constructs the root model from a loaded config and an
+// initialized audio Player. NewModel does not take ownership of the
+// Player — the caller (main) is responsible for Close.
+func NewModel(cfg *config.Config, player *audio.Player) Model {
 	t, _ := theme.Lookup(cfg.Theme)
 	return Model{
 		cfg:        cfg,
+		player:     player,
 		theme:      t,
 		styles:     NewStyles(t),
 		keys:       DefaultKeyMap(),
@@ -43,10 +58,10 @@ func NewModel(cfg *config.Config) Model {
 	}
 }
 
-// Init returns the initial command. Phase 0 has no asynchronous work
-// to start, so this is a no-op.
+// Init starts the long-lived event subscription that bridges audio
+// events into the Update loop.
 func (m Model) Init() tea.Cmd {
-	return nil
+	return waitForEvent(m.player)
 }
 
 func clampVolume(v int) int {
