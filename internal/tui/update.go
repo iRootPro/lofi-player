@@ -22,7 +22,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// fire whether or not the user is still inside the mixer modal.
 	if tick, ok := msg.(ambientSaveTickMsg); ok {
 		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
-			m.saveAmbient(m.mixer.Volumes())
+			if err := m.saveAmbient(m.mixer.Volumes()); err != nil {
+				m.toast = &Toast{
+					Message: fmt.Sprintf("ambient state save failed: %v", err),
+					Kind:    ToastError,
+				}
+				return m, clearToastAfter()
+			}
 		}
 		return m, nil
 	}

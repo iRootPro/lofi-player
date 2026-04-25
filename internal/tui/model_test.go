@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -306,9 +307,10 @@ func TestAmbientSaveDebounceTickCoalesces(t *testing.T) {
 
 	m := NewModel(cfg, nil, am, Options{
 		AutoplayStation: -1,
-		SaveAmbient: func(snap map[string]int) {
+		SaveAmbient: func(snap map[string]int) error {
 			saveCalls++
 			lastSnapshot = snap
+			return nil
 		},
 	})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -340,9 +342,58 @@ func TestAmbientSaveDebounceTickCoalesces(t *testing.T) {
 func TestAmbientSaveSkippedWhenCallbackNil(t *testing.T) {
 	m := fixture()
 	// fixture() builds NewModel with Options that don't set SaveAmbient.
-	// A tick with no callback should be a quiet no-op.
+	// A tick with no callback should be a quiet no-op — toast remains
+	// nil and the seq counter is untouched.
+	beforeSeq := m.ambientSaveSeq
 	updated, _ := m.Update(ambientSaveTickMsg{seq: 0})
-	if updated == nil {
-		t.Error("Update returned nil model")
+	out := updated.(Model)
+	if out.toast != nil {
+		t.Errorf("nil callback produced toast: %+v", out.toast)
 	}
+	if out.ambientSaveSeq != beforeSeq {
+		t.Errorf("ambientSaveSeq mutated: got %d, want %d", out.ambientSaveSeq, beforeSeq)
+	}
+}
+
+func TestAmbientSaveErrorSurfacesAsToast(t *testing.T) {
+	cfg := &config.Config{Theme: "tokyo-night", Volume: 60, Stations: []config.Station{{Name: "A"}}}
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	m := NewModel(cfg, nil, am, Options{
+		AutoplayStation: -1,
+		SaveAmbient: func(snap map[string]int) error {
+			return errors.New("disk full")
+		},
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m = send(t, m, "x", "l") // open mixer + one volume bump
+
+	updated, _ = m.Update(ambientSaveTickMsg{seq: m.ambientSaveSeq})
+	m = updated.(Model)
+	if m.toast == nil || m.toast.Kind != ToastError {
+		t.Fatalf("expected error toast, got %+v", m.toast)
+	}
+	if !strings.Contains(m.toast.Message, "disk full") {
+		t.Errorf("toast message missing wrapped err: %q", m.toast.Message)
+	}
+}
+
+func TestMixerKeyReturnsScheduledTick(t *testing.T) {
+	// Sanity check that pressing a mixer key actually returns a non-nil
+	// tea.Cmd so the runtime schedules the debounce tick. The handler
+	// path is covered separately; this guards the wiring.
+	m := fixture()
+	m = send(t, m, "x")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if cmd == nil {
+		t.Error("mixer key produced nil cmd; expected scheduled debounce tick")
+	}
+	_ = updated
 }
