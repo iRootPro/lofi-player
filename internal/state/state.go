@@ -33,6 +33,10 @@ type State struct {
 	// station; the loader matches it back to an index in cfg.Stations
 	// so renaming a station doesn't break the autoplay-on-startup path.
 	LastStationName string `json:"last_station_name,omitempty"`
+	// Ambient holds per-channel volumes for the ambient mixer keyed
+	// by channel id (e.g. {"rain": 40}). Unknown keys round-trip
+	// untouched so older builds don't drop channels added by newer ones.
+	Ambient map[string]int `json:"ambient,omitempty"`
 }
 
 // Path returns the canonical path to the state file. It honors
