@@ -268,7 +268,10 @@ func (m Model) renderVolume() string {
 	fill := v * volumeWidth / 100
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
-	return m.styles.VolLabel.Render(iconVolume) + "  " +
+	// Bold + Foreground gives the icon extra weight in fonts that ship
+	// a heavier variant of the FA glyph; on others it falls back to
+	// the regular weight without breaking layout.
+	return m.styles.VolLabel.Bold(true).Render(iconVolume) + "  " +
 		bar + "  " +
 		m.styles.VolPercent.Render(fmt.Sprintf("%3d%%", v))
 }
