@@ -299,11 +299,10 @@ func (m Model) statusBlock() string {
 
 // formatTrack returns the second line of the now-playing block.
 //
-//   - Loading (mpv buffering) → muted "…" so the spinner status is
-//     the only animated element on screen — no double-spinner noise.
-//   - No metadata yet, but playback has started → spinner + "buffering
-//     metadata" label, indicating that audio is happening but ICY /
-//     media-title hasn't resolved.
+//   - Empty metadata → a muted "…" placeholder. Audio may already be
+//     playing (the status spinner has cleared), but ICY / media-title
+//     hasn't resolved yet; the placeholder keeps the card two lines
+//     tall without a second animated element.
 //   - Real "Artist — Title" metadata → title in foreground, artist in
 //     the warning accent. The normal "real track playing" case.
 //   - Title only (no artist split) → muted styling. mpv's ytdl_hook
@@ -316,10 +315,7 @@ func (m Model) statusBlock() string {
 // doesn't reflow when a verbose value arrives.
 func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
-		if m.loading {
-			return m.styles.Hint.Render("…")
-		}
-		return m.spinner.View() + "  " + m.styles.Hint.Render("buffering metadata")
+		return m.styles.Hint.Render("…")
 	}
 
 	sep := "  —  "
