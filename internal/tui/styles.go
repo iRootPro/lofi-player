@@ -26,7 +26,6 @@ type Styles struct {
 	StationCursor  lipgloss.Style
 	StationPlaying lipgloss.Style
 	AddStation     lipgloss.Style
-	Separator      lipgloss.Style
 	HelpKey        lipgloss.Style
 	HelpDesc       lipgloss.Style
 	HelpSep        lipgloss.Style
@@ -39,7 +38,7 @@ type Styles struct {
 func NewStyles(t theme.Theme) Styles {
 	muted := lipgloss.NewStyle().Foreground(t.Muted)
 	return Styles{
-		AppTitle:       lipgloss.NewStyle().Foreground(t.Primary).Bold(true),
+		AppTitle:       lipgloss.NewStyle().Foreground(t.Primary),
 		Clock:          lipgloss.NewStyle().Foreground(t.Info),
 		StationName:    lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
 		StatusLive:     lipgloss.NewStyle().Foreground(t.Success),
@@ -58,7 +57,6 @@ func NewStyles(t theme.Theme) Styles {
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
 		StationPlaying: lipgloss.NewStyle().Foreground(t.Accent),
 		AddStation:     muted,
-		Separator:      muted,
 		HelpKey:        lipgloss.NewStyle().Foreground(t.Warning),
 		HelpDesc:       muted,
 		HelpSep:        muted,

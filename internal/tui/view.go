@@ -24,6 +24,22 @@ const (
 	streakBarWidth = 7
 )
 
+// Nerd Font icons (FontAwesome subset, PUA range U+F000–U+F8FF).
+// Terminals without a Nerd Font will render these as tofu boxes;
+// the trade-off is documented in the README.
+const (
+	iconLogo     = "" //  music
+	iconVolume   = "" //  volume-up
+	iconStations = "" //  list
+	iconToday    = "" //  clock-o
+	iconPomodoro = "" //  bullseye
+)
+
+const (
+	statusGlyphLive   = "●"
+	statusGlyphPaused = "◯"
+)
+
 // View renders the model. Returns an empty string until the first
 // WindowSizeMsg arrives so the user never sees a stretched flash on
 // startup (plan §6 pitfall).
@@ -66,8 +82,6 @@ func (m Model) viewFull() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderMainArea())
 	b.WriteString("\n\n")
-	b.WriteString(m.renderSeparator())
-	b.WriteString("\n")
 	b.WriteString(m.renderHelpOrToast())
 	return b.String()
 }
@@ -113,14 +127,16 @@ func (m Model) renderRightColumn() string {
 // stations list when a pomodoro isn't active but the user has stats
 // for today — gives presence without claiming the right column.
 func (m Model) renderTodayCompact() string {
-	parts := []string{m.styles.SectionHeader.Render("today")}
-	parts = append(parts, m.styles.HelpDesc.Render("listened ")+
-		m.styles.StationItem.Render(formatListened(m.stats.ListenedToday)))
+	parts := []string{m.styles.SectionHeader.Render(iconToday + "  today")}
+	parts = append(parts,
+		m.styles.StationItem.Render(formatListened(m.stats.ListenedToday))+" "+
+			m.styles.HelpDesc.Render("listened"))
 	if m.stats.Streak > 0 {
-		parts = append(parts, m.styles.HelpDesc.Render("streak ")+
-			m.renderStreakBar(m.stats.Streak))
+		parts = append(parts,
+			m.styles.StatusLive.Render(fmt.Sprintf("%dd", m.stats.Streak))+" "+
+				m.styles.HelpDesc.Render("streak"))
 	}
-	return leftPad + strings.Join(parts, m.styles.HelpSep.Render("  ·  "))
+	return leftPad + strings.Join(parts, "   ")
 }
 
 func (m Model) renderPomodoroBlock() string {
@@ -134,8 +150,8 @@ func (m Model) renderPomodoroBlock() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(m.styles.SectionHeader.Render("─── pomodoro ───"))
-	b.WriteString("\n")
+	b.WriteString(m.styles.SectionHeader.Render(iconPomodoro + "  pomodoro"))
+	b.WriteString("\n\n")
 	phaseLabel := m.session.Phase.String()
 	timeLabel := fmt.Sprintf("%02d:%02d", mm, ss)
 	b.WriteString(padToWidth(m.styles.HelpDesc.Render(phaseLabel), 10))
@@ -148,8 +164,8 @@ func (m Model) renderPomodoroBlock() string {
 
 func (m Model) renderTodayBlock() string {
 	var b strings.Builder
-	b.WriteString(m.styles.SectionHeader.Render("─── today ───"))
-	b.WriteString("\n")
+	b.WriteString(m.styles.SectionHeader.Render(iconToday + "  today"))
+	b.WriteString("\n\n")
 	b.WriteString(padToWidth(m.styles.HelpDesc.Render("listened"), 10))
 	b.WriteString(m.styles.StationItem.Render(formatListened(m.stats.ListenedToday)))
 	b.WriteString("\n")
@@ -218,14 +234,13 @@ func (m Model) viewMini() string {
 		b.WriteString(m.renderToast())
 	} else {
 		parts := renderBindings(m.styles, m.keys.MiniShortHelp())
-		sep := m.styles.HelpSep.Render("  ·  ")
-		b.WriteString(leftPad + strings.Join(parts, sep))
+		b.WriteString(leftPad + strings.Join(parts, "   "))
 	}
 	return b.String()
 }
 
 func (m Model) renderHeader() string {
-	title := m.styles.AppTitle.Render("♪ lofi.player")
+	title := m.styles.AppTitle.Render(iconLogo + "  lofi.player")
 	clock := m.styles.Clock.Render(time.Now().Format("15:04"))
 
 	gap := m.width - len(leftPad)*2 - lipgloss.Width(title) - lipgloss.Width(clock)
@@ -235,47 +250,91 @@ func (m Model) renderHeader() string {
 	return leftPad + title + strings.Repeat(" ", gap) + clock
 }
 
+// renderNowPlaying wraps the station + track block in a rounded card.
+// The card is the screen's primary focus element — everything else
+// (volume, stations list) sits visually below it without competing
+// borders.
 func (m Model) renderNowPlaying() string {
 	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
 		return leftPad + m.styles.Hint.Render("— no station selected —")
 	}
+
+	cardWidth := m.width - len(leftPad)*2
+	if cardWidth < 24 {
+		cardWidth = 24
+	}
+	// Inside the card: 2 chars of horizontal padding on each side leave
+	// (cardWidth - 2 borders - 4 padding) for content.
+	innerWidth := cardWidth - 6
+
 	name := m.cfg.Stations[m.playingIdx].Name
-	status := "live"
+	statusGlyph := statusGlyphLive
 	statusStyle := m.styles.StatusLive
 	if !m.playing {
-		status = "paused"
+		statusGlyph = statusGlyphPaused
 		statusStyle = m.styles.StatusPaused
 	}
-	dot := m.styles.SectionHeader.Render("  ·  ")
 
-	// formatTrack always returns a non-empty string when a station is
-	// active (it uses a muted "♪ …" placeholder while metadata is in
-	// flight), so the now-playing block stays two lines tall and
-	// doesn't bounce when the title arrives.
-	return leftPad + m.styles.StationName.Render(name) + dot + statusStyle.Render(status) +
-		"\n" + leftPad + m.formatTrack()
+	stationLine := statusStyle.Render(statusGlyph) + "  " + m.styles.StationName.Render(name)
+	trackLine := m.formatTrack(innerWidth)
+	inner := stationLine + "\n" + trackLine
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(0, 2).
+		Width(cardWidth).
+		MarginLeft(len(leftPad)).
+		Render(inner)
+	return card
 }
 
 // formatTrack returns the second line of the now-playing block. When
 // metadata hasn't arrived yet (typical for the first ~2 s of a fresh
-// stream), it returns a muted "♪ …" placeholder so the now-playing
-// block doesn't visually collapse into a single line on station start.
-func (m Model) formatTrack() string {
-	mark := m.styles.StationPlaying.Render("♪") + " "
+// stream), it returns a muted "…" placeholder. Long titles are
+// truncated to maxWidth with an ellipsis so the card doesn't reflow
+// when a verbose title arrives.
+func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
-		return mark + m.styles.Hint.Render("…")
+		return m.styles.Hint.Render("…")
 	}
+
+	sep := "  —  "
 	switch {
 	case m.currentTrack.Artist != "" && m.currentTrack.Title != "":
-		return mark +
-			m.styles.StationItem.Render(m.currentTrack.Title) +
-			m.styles.SectionHeader.Render("  —  ") +
-			m.styles.HelpKey.Render(m.currentTrack.Artist)
+		// Reserve space for the separator + artist; truncate the title.
+		artist := m.currentTrack.Artist
+		artistRendered := m.styles.HelpKey.Render(artist)
+		titleBudget := maxWidth - lipgloss.Width(sep) - lipgloss.Width(artist)
+		if titleBudget < 4 {
+			titleBudget = 4
+		}
+		title := truncateRunes(m.currentTrack.Title, titleBudget)
+		return m.styles.StationItem.Render(title) +
+			m.styles.SectionHeader.Render(sep) +
+			artistRendered
 	case m.currentTrack.Title != "":
-		return mark + m.styles.StationItem.Render(m.currentTrack.Title)
+		return m.styles.StationItem.Render(truncateRunes(m.currentTrack.Title, maxWidth))
 	default:
-		return mark + m.styles.HelpKey.Render(m.currentTrack.Artist)
+		return m.styles.HelpKey.Render(truncateRunes(m.currentTrack.Artist, maxWidth))
 	}
+}
+
+// truncateRunes shortens s to at most maxWidth display cells, appending
+// "…" when truncation happens. Operates on runes (not bytes) so
+// multi-byte characters split cleanly.
+func truncateRunes(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return "…"
 }
 
 func (m Model) renderVolume() string {
@@ -296,7 +355,7 @@ func (m Model) renderVolume() string {
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
 	return leftPad +
-		m.styles.VolLabel.Render("VOL ") +
+		m.styles.VolLabel.Render(iconVolume+"  ") +
 		bar +
 		"  " +
 		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", m.volume))
@@ -304,49 +363,53 @@ func (m Model) renderVolume() string {
 
 func (m Model) renderStations() string {
 	var b strings.Builder
-	b.WriteString(leftPad + m.styles.SectionHeader.Render("─── stations ───"))
-	b.WriteString("\n")
+	b.WriteString(leftPad + m.styles.SectionHeader.Render(iconStations+"  stations"))
+	b.WriteString("\n\n")
 
 	if len(m.cfg.Stations) == 0 {
-		b.WriteString(leftPad + "  " +
+		// Indent matches the station-name column (leftPad + 4-cell prefix).
+		b.WriteString(leftPad + "    " +
 			m.styles.StationCursor.Render("press a") + " " +
 			m.styles.Hint.Render("to add one"))
 		b.WriteString("\n")
 	}
 
 	for i, s := range m.cfg.Stations {
-		var prefix, name string
+		// Three-cell prefix: cursor bar + space + playing-status dot.
+		// The dot lives in the same column for every row so the station
+		// names line up regardless of which one is playing or selected.
+		cursor := "  "
+		if i == m.cursor {
+			cursor = m.styles.StationCursor.Render("▎") + " "
+		}
+
+		marker := " "
+		if i == m.playingIdx {
+			glyph := statusGlyphLive
+			style := m.styles.StatusLive
+			if !m.playing {
+				glyph = statusGlyphPaused
+				style = m.styles.StatusPaused
+			}
+			marker = style.Render(glyph)
+		}
+
+		var name string
 		switch {
 		case i == m.cursor:
-			// Vertical bar reads as a clean left-edge accent —
-			// typographically calmer than the chevron used previously.
-			prefix = m.styles.StationCursor.Render("▎") + " "
 			name = m.styles.StationCursor.Render(s.Name)
 		case i == m.playingIdx:
-			prefix = "  "
 			name = m.styles.StationPlaying.Render(s.Name)
 		default:
-			prefix = "  "
 			name = m.styles.StationItem.Render(s.Name)
 		}
-		line := leftPad + prefix + name
-		if i == m.playingIdx {
-			line += "  " + m.styles.StationPlaying.Render("♪")
-		}
-		b.WriteString(line + "\n")
+
+		b.WriteString(leftPad + cursor + marker + " " + name + "\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(leftPad + "  " + m.styles.AddStation.Render("+ add station"))
+	b.WriteString(leftPad + "    " + m.styles.AddStation.Render("+ add station"))
 	return b.String()
-}
-
-func (m Model) renderSeparator() string {
-	width := m.width - len(leftPad)*2
-	if width < 1 {
-		width = 1
-	}
-	return leftPad + m.styles.Separator.Render(strings.Repeat("─", width))
 }
 
 func (m Model) renderHelpOrToast() string {
@@ -370,8 +433,9 @@ func (m Model) renderToast() string {
 
 func (m Model) renderShortHelp() string {
 	parts := renderBindings(m.styles, m.keys.ShortHelp())
-	sep := m.styles.HelpSep.Render("  ·  ")
-	return leftPad + strings.Join(parts, sep)
+	// Triple-space gives a soft "tab" between bindings without the
+	// noise of an explicit separator glyph.
+	return leftPad + strings.Join(parts, "   ")
 }
 
 func (m Model) renderFullHelp() string {

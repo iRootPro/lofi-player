@@ -21,6 +21,11 @@ designed to live happily in a tmux pane.
   only if your config has YouTube-kind stations; the app refuses to
   start with a clear hint if it's missing
 - A terminal that handles 256 colors and Unicode block characters
+- A **Nerd Font** for the section/volume/logo icons (FontAwesome subset).
+  Without one, those icons render as tofu boxes (`􂁒` etc.); the rest of
+  the UI keeps working. JetBrains Mono Nerd Font and FiraCode Nerd Font
+  are popular choices. Ghostty / WezTerm / Kitty / iTerm2 all support
+  loading a Nerd Font as the terminal font.
 
 ## Build & run
 

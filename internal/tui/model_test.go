@@ -153,15 +153,19 @@ func TestView_ShowsPlayingMarker(t *testing.T) {
 	m := fixture()
 	m = send(t, m, "space") // play station A
 	out := m.View()
-	if !strings.Contains(out, "♪") {
-		t.Errorf("expected ♪ marker in view after starting playback; got:\n%s", out)
+	// The playing-state indicator is now a ● glyph (Unicode "BLACK
+	// CIRCLE") shown both in the now-playing card and beside the
+	// currently-playing station in the list.
+	if !strings.Contains(out, "●") {
+		t.Errorf("expected ● live indicator in view after starting playback; got:\n%s", out)
 	}
-	if !strings.Contains(out, "live") {
-		t.Errorf("expected 'live' status in view; got:\n%s", out)
+	if strings.Contains(out, "◯") {
+		t.Errorf("did not expect ◯ paused indicator while playing; got:\n%s", out)
 	}
+
 	m = send(t, m, "space") // pause
 	out = m.View()
-	if !strings.Contains(out, "paused") {
-		t.Errorf("expected 'paused' status in view; got:\n%s", out)
+	if !strings.Contains(out, "◯") {
+		t.Errorf("expected ◯ paused indicator after pause; got:\n%s", out)
 	}
 }
