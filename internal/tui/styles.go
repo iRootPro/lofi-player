@@ -49,7 +49,9 @@ func NewStyles(t theme.Theme) Styles {
 		StationName:    lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
 		StatusLive:     lipgloss.NewStyle().Foreground(t.Success),
 		StatusPaused:   muted,
-		VolLabel:       muted,
+		// VolLabel matches the fill color so the speaker icon and the
+		// filled cells read as one unified volume widget.
+		VolLabel:       lipgloss.NewStyle().Foreground(t.Primary),
 		VolFill:        lipgloss.NewStyle().Foreground(t.Primary),
 		// VolEmpty is the placeholder track behind the fill cells.
 		// Muted (lighter than Subtle) keeps the empty segments visible

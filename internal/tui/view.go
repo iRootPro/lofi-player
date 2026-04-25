@@ -257,20 +257,16 @@ func truncateRunes(s string, maxWidth int) string {
 	return "…"
 }
 
-// renderVolume composes the volume widget — speaker icon, fill bar,
-// and percentage. Used as the right-side label embedded in the
-// frame's top border. Volume changes are instant in 5%-steps; the
-// percent is right-aligned to a fixed 3-digit width ("  5%", " 80%",
-// "100%") so the title bar's filler doesn't jitter when the digit
-// count changes.
+// renderVolume composes the volume widget — speaker icon followed by
+// the fill bar. Lives as the right-side label in the frame's top
+// border. The bar is enough on its own; the digit/percent text was
+// just visual repetition.
 func (m Model) renderVolume() string {
 	v := clampVolume(m.volume)
 	fill := v * volumeWidth / 100
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
-	return m.styles.VolLabel.Render(iconVolume) + "  " +
-		bar + "  " +
-		m.styles.VolPercent.Render(fmt.Sprintf("%3d%%", v))
+	return m.styles.VolLabel.Render(iconVolume) + " " + bar
 }
 
 func (m Model) renderStations() string {
