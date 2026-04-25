@@ -305,7 +305,7 @@ func (m Model) renderNowPlaying() string {
 // card doesn't reflow when a verbose value arrives.
 func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
-		return m.styles.Hint.Render("…")
+		return m.spinner.View() + "  " + m.styles.Hint.Render("buffering")
 	}
 
 	sep := "  —  "

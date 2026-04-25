@@ -3,7 +3,9 @@ package tui
 import (
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
@@ -72,6 +74,12 @@ type Model struct {
 	currentTrack Track
 	toast        *Toast
 
+	// spinner ticks at ~10 Hz and renders the buffering placeholder
+	// inside the now-playing card while ICY/media-title metadata is in
+	// flight. The tick keeps running globally; the renderer only uses
+	// it when there's nothing else to show.
+	spinner spinner.Model
+
 	autoplayURL string
 
 	session        pomodoro.Session
@@ -114,6 +122,10 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		autoplayURL = cfg.Stations[opts.AutoplayStation].URL
 	}
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(t.Muted)
+
 	return Model{
 		cfg:             cfg,
 		player:          player,
@@ -125,6 +137,7 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		playing:         playing,
 		volume:          volume,
 		volumeDisplayed: float64(volume),
+		spinner:         sp,
 		autoplayURL:     autoplayURL,
 		session:         pomodoro.New(),
 		stats:           opts.Stats,
@@ -132,10 +145,11 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 }
 
 // Init starts the long-lived event subscription that bridges audio
-// events into the Update loop. If the model was constructed with an
-// AutoplayStation, the corresponding playCmd is also dispatched.
+// events into the Update loop, plus the buffering spinner's tick loop.
+// If the model was constructed with an AutoplayStation, the
+// corresponding playCmd is also dispatched.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{waitForEvent(m.player)}
+	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
 	}
