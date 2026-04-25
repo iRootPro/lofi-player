@@ -79,7 +79,10 @@ func (m Model) View() string {
 
 	title := iconLogo + "  lofi.player"
 	rightLabel := inner.renderVolume()
-	bottomLabel := m.styles.HelpKey.Render("?") + " " + m.styles.HelpDesc.Render("help")
+	// "?" picks up the brand Primary so it reads as part of the same
+	// interactive-element family as the logo and the volume icon;
+	// "help" stays muted so the hint sits quietly in the border.
+	bottomLabel := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
 
 	framed := renderFrame(
 		content,
