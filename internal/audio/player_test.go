@@ -139,11 +139,16 @@ func TestTranslateOne_EndFileError(t *testing.T) {
 	}
 }
 
+func TestTranslateOne_PlaybackRestart(t *testing.T) {
+	p := &Player{}
+	e := p.translateOne(ipcEvent{Event: "playback-restart"})
+	if _, ok := e.(PlaybackStarted); !ok {
+		t.Errorf("playback-restart: got %T, want PlaybackStarted", e)
+	}
+}
+
 func TestTranslateOne_UnknownEventDropped(t *testing.T) {
 	p := &Player{}
-	if e := p.translateOne(ipcEvent{Event: "playback-restart"}); e != nil {
-		t.Errorf("playback-restart: got %v, want nil", e)
-	}
 	if e := p.translateOne(ipcEvent{Event: "property-change", Name: "idle-active", Data: json.RawMessage("true")}); e != nil {
 		t.Errorf("idle-active: got %v, want nil", e)
 	}

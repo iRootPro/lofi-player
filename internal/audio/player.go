@@ -293,6 +293,13 @@ func (p *Player) translateOne(raw ipcEvent) Event {
 	switch raw.Event {
 	case "property-change":
 		return p.translatePropertyChange(raw)
+	case "playback-restart":
+		// Fires when mpv actually starts (or resumes) feeding audio to
+		// the output, after buffering completes. This is the reliable
+		// "loading is done" signal — the pause property-change is not,
+		// because loadfile keeps pause at its previous value (false ➜
+		// false yields no change event).
+		return PlaybackStarted{}
 	case "end-file":
 		switch raw.Reason {
 		case "eof":
