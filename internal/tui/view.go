@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	leftPad     = "  "
-	volumeWidth = 10
+	leftPad     = "    "
+	volumeWidth = 14
 	// nowPlayingMaxWidth caps the now-playing card so it doesn't
 	// stretch across very wide terminals. The card is the focal
 	// element of the screen; an 80-cell width keeps it readable
@@ -72,7 +72,7 @@ func (m Model) viewFull() string {
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n")
 	b.WriteString(m.renderVolume())
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 	b.WriteString(m.renderStations())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelpOrToast())
