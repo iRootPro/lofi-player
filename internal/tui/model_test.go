@@ -151,19 +151,29 @@ func TestUpdate_QuitReturnsTeaQuit(t *testing.T) {
 
 func TestView_ShowsPlayingMarker(t *testing.T) {
 	m := fixture()
-	m = send(t, m, "space") // play station A
+	m = send(t, m, "space") // dispatch play; model goes into loading state
+
+	if !m.loading {
+		t.Errorf("expected loading=true immediately after space, got false")
+	}
+
+	// Simulate mpv's PlaybackStarted event so loading clears and the
+	// status indicator transitions from spinner → ● glyph.
+	updated, _ := m.Update(PlaybackStartedMsg{})
+	m = updated.(Model)
+
 	out := m.View()
-	// The playing-state indicator is now a ● glyph (Unicode "BLACK
-	// CIRCLE") shown both in the now-playing card and beside the
-	// currently-playing station in the list.
 	if !strings.Contains(out, "●") {
-		t.Errorf("expected ● live indicator in view after starting playback; got:\n%s", out)
+		t.Errorf("expected ● live indicator in view after PlaybackStarted; got:\n%s", out)
 	}
 	if strings.Contains(out, "◯") {
 		t.Errorf("did not expect ◯ paused indicator while playing; got:\n%s", out)
 	}
 
-	m = send(t, m, "space") // pause
+	m = send(t, m, "space") // toggle pause on the same station
+	updated, _ = m.Update(PlaybackPausedMsg{})
+	m = updated.(Model)
+
 	out = m.View()
 	if !strings.Contains(out, "◯") {
 		t.Errorf("expected ◯ paused indicator after pause; got:\n%s", out)

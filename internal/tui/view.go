@@ -268,14 +268,7 @@ func (m Model) renderNowPlaying() string {
 	innerWidth := cardWidth - 4
 
 	name := m.cfg.Stations[m.playingIdx].Name
-	statusGlyph := statusGlyphLive
-	statusStyle := m.styles.StatusLive
-	if !m.playing {
-		statusGlyph = statusGlyphPaused
-		statusStyle = m.styles.StatusPaused
-	}
-
-	stationLine := statusStyle.Render(statusGlyph) + "  " + m.styles.StationName.Render(name)
+	stationLine := m.statusBlock() + "  " + m.styles.StationName.Render(name)
 	trackLine := m.formatTrack(innerWidth)
 	inner := stationLine + "\n" + trackLine
 
@@ -289,23 +282,44 @@ func (m Model) renderNowPlaying() string {
 	return card
 }
 
+// statusBlock returns the leading status indicator for the now-playing
+// card and the playing-station row in the list. While the player is
+// waiting for the first PlaybackStarted event after a Play call, it
+// renders the spinner instead of the ●/◯ glyph.
+func (m Model) statusBlock() string {
+	switch {
+	case m.loading:
+		return m.spinner.View()
+	case m.playing:
+		return m.styles.StatusLive.Render(statusGlyphLive)
+	default:
+		return m.styles.StatusPaused.Render(statusGlyphPaused)
+	}
+}
+
 // formatTrack returns the second line of the now-playing block.
 //
-//   - Empty metadata → a muted "…" placeholder so the card stays
-//     two lines tall while ICY/media-title is in flight.
-//   - Real "Artist — Title" metadata → title in foreground, artist
-//     in the warning accent. This is the "real track playing" case.
+//   - Loading (mpv buffering) → muted "…" so the spinner status is
+//     the only animated element on screen — no double-spinner noise.
+//   - No metadata yet, but playback has started → spinner + "buffering
+//     metadata" label, indicating that audio is happening but ICY /
+//     media-title hasn't resolved.
+//   - Real "Artist — Title" metadata → title in foreground, artist in
+//     the warning accent. The normal "real track playing" case.
 //   - Title only (no artist split) → muted styling. mpv's ytdl_hook
 //     surfaces the YouTube channel description here when no track
 //     metadata exists ("lofi hip hop radio  beats to relax/study
 //     to ..."); rendering it muted communicates "stream descriptor"
 //     rather than "song title".
 //
-// Long strings are truncated to maxWidth with an ellipsis so the
-// card doesn't reflow when a verbose value arrives.
+// Long strings are truncated to maxWidth with an ellipsis so the card
+// doesn't reflow when a verbose value arrives.
 func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
-		return m.spinner.View() + "  " + m.styles.Hint.Render("buffering")
+		if m.loading {
+			return m.styles.Hint.Render("…")
+		}
+		return m.spinner.View() + "  " + m.styles.Hint.Render("buffering metadata")
 	}
 
 	sep := "  —  "
@@ -394,13 +408,7 @@ func (m Model) renderStations() string {
 
 		marker := " "
 		if i == m.playingIdx {
-			glyph := statusGlyphLive
-			style := m.styles.StatusLive
-			if !m.playing {
-				glyph = statusGlyphPaused
-				style = m.styles.StatusPaused
-			}
-			marker = style.Render(glyph)
+			marker = m.statusBlock()
 		}
 
 		var name string

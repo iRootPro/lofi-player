@@ -62,7 +62,12 @@ type Model struct {
 	cursor     int
 	playingIdx int
 	playing    bool
-	volume     int
+	// loading is true between dispatching playCmd (or autoplay on
+	// startup) and the first PlaybackStarted event from mpv. While
+	// loading is true, the status indicator renders the spinner
+	// instead of the ●/◯ glyph.
+	loading bool
+	volume  int
 
 	// volumeDisplayed is the currently-rendered (animated) volume value;
 	// volumeVelocity is the spring's velocity. Both fields are updated
@@ -114,11 +119,13 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 	cursor := 0
 	playingIdx := -1
 	playing := false
+	loading := false
 	autoplayURL := ""
 	if opts.AutoplayStation >= 0 && opts.AutoplayStation < len(cfg.Stations) {
 		cursor = opts.AutoplayStation
 		playingIdx = opts.AutoplayStation
 		playing = true
+		loading = true
 		autoplayURL = cfg.Stations[opts.AutoplayStation].URL
 	}
 
@@ -135,6 +142,7 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		cursor:          cursor,
 		playingIdx:      playingIdx,
 		playing:         playing,
+		loading:         loading,
 		volume:          volume,
 		volumeDisplayed: float64(volume),
 		spinner:         sp,

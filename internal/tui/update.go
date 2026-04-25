@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/pomodoro"
@@ -40,21 +41,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case PlaybackStartedMsg:
 		m.playing = true
+		m.loading = false
 		return m, waitForEvent(m.player)
 
 	case PlaybackPausedMsg:
 		m.playing = false
+		m.loading = false
 		return m, waitForEvent(m.player)
 
 	case PlaybackErrorMsg:
 		m.toast = &Toast{Message: msg.Err.Error(), Kind: ToastError}
 		m.playing = false
+		m.loading = false
 		m.playingIdx = -1
 		m.currentTrack = Track{}
 		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
 	case EOFMsg:
 		m.playing = false
+		m.loading = false
 		m.playingIdx = -1
 		m.currentTrack = Track{}
 		return m, waitForEvent(m.player)
@@ -116,6 +121,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		next, _ := theme.Lookup(theme.Next(m.theme.Name))
 		m.theme = next
 		m.styles = NewStyles(next)
+		// Spinner color is baked at construction; refresh it so the
+		// spinner stays in sync with the active theme's Muted tone.
+		m.spinner.Style = lipgloss.NewStyle().Foreground(next.Muted)
 		return m, nil
 
 	case key.Matches(msg, m.keys.Mini):
@@ -285,9 +293,12 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 		m.playing = true
 		return m, resumeCmd(m.player)
 	}
-	// Switching to a different station — replace playback.
+	// Switching to a different station — replace playback. Mark the
+	// model as loading; the spinner takes over the status slot until
+	// PlaybackStarted arrives from mpv.
 	m.playingIdx = m.cursor
 	m.playing = true
+	m.loading = true
 	m.currentTrack = Track{}
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
 }
