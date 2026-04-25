@@ -24,6 +24,12 @@ type Styles struct {
 	StationItem    lipgloss.Style
 	StationCursor  lipgloss.Style
 	StationPlaying lipgloss.Style
+	// Cursor styles the navigation cursor glyph and the highlighted
+	// station name. Distinct from StationCursor (which is the accent
+	// pink used for error indicators and "press a" hints) so the
+	// cursor's blue doesn't conflict with the green playing dot when
+	// they share a row.
+	Cursor lipgloss.Style
 	HelpKey        lipgloss.Style
 	HelpDesc       lipgloss.Style
 	HelpSep        lipgloss.Style
@@ -37,7 +43,9 @@ func NewStyles(t theme.Theme) Styles {
 	muted := lipgloss.NewStyle().Foreground(t.Muted)
 	return Styles{
 		AppTitle:       lipgloss.NewStyle().Foreground(t.Primary),
-		Clock:          lipgloss.NewStyle().Foreground(t.Info),
+		// Clock sits as a quiet auxiliary in the top-right; the muted
+		// tone keeps it from competing with the brand on the left.
+		Clock: muted,
 		StationName:    lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
 		StatusLive:     lipgloss.NewStyle().Foreground(t.Success),
 		StatusPaused:   muted,
@@ -49,6 +57,7 @@ func NewStyles(t theme.Theme) Styles {
 		StationItem:    lipgloss.NewStyle().Foreground(t.Foreground),
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
 		StationPlaying: lipgloss.NewStyle().Foreground(t.Accent),
+		Cursor:         lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
 		HelpKey:        lipgloss.NewStyle().Foreground(t.Warning),
 		HelpDesc:       muted,
 		HelpSep:        muted,

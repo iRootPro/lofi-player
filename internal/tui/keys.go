@@ -34,15 +34,15 @@ func DefaultKeyMap() KeyMap {
 		// as a single space, not the string "space" (plan §6 pitfall).
 		PlayPause: key.NewBinding(
 			key.WithKeys(" "),
-			key.WithHelp("space", "play/pause"),
+			key.WithHelp("space", "play"),
 		),
 		VolUp: key.NewBinding(
 			key.WithKeys("+", "="),
-			key.WithHelp("+", "vol up"),
+			key.WithHelp("+", "vol+"),
 		),
 		VolDown: key.NewBinding(
 			key.WithKeys("-", "_"),
-			key.WithHelp("-", "vol down"),
+			key.WithHelp("-", "vol-"),
 		),
 		ThemeCycle: key.NewBinding(
 			key.WithKeys("t"),
@@ -54,7 +54,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		AddStation: key.NewBinding(
 			key.WithKeys("a"),
-			key.WithHelp("a", "add station"),
+			key.WithHelp("a", "add"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),

@@ -12,6 +12,11 @@ import (
 const (
 	leftPad     = "  "
 	volumeWidth = 10
+	// nowPlayingMaxWidth caps the now-playing card so it doesn't
+	// stretch across very wide terminals. The card is the focal
+	// element of the screen; an 80-cell width keeps it readable
+	// without floating in negative space on a 200-cell terminal.
+	nowPlayingMaxWidth = 80
 )
 
 // Nerd Font icons (FontAwesome subset, PUA range U+F000–U+F8FF).
@@ -116,6 +121,9 @@ func (m Model) renderNowPlaying() string {
 	}
 
 	cardWidth := m.width - len(leftPad)*2
+	if cardWidth > nowPlayingMaxWidth {
+		cardWidth = nowPlayingMaxWidth
+	}
 	if cardWidth < 24 {
 		cardWidth = 24
 	}
@@ -237,7 +245,11 @@ func (m Model) renderVolume() string {
 
 func (m Model) renderStations() string {
 	var b strings.Builder
-	b.WriteString(leftPad + m.styles.SectionHeader.Render(iconStations+"  stations"))
+	header := iconStations + "  stations"
+	if n := len(m.cfg.Stations); n > 0 {
+		header += fmt.Sprintf("  ·  %d", n)
+	}
+	b.WriteString(leftPad + m.styles.SectionHeader.Render(header))
 	b.WriteString("\n")
 
 	if len(m.cfg.Stations) == 0 {
@@ -255,7 +267,7 @@ func (m Model) renderStations() string {
 		// names line up regardless of which one is playing or selected.
 		cursor := "  "
 		if i == m.cursor {
-			cursor = m.styles.StationCursor.Render("▎") + " "
+			cursor = m.styles.Cursor.Render("▎") + " "
 		}
 
 		marker := " "
@@ -266,7 +278,7 @@ func (m Model) renderStations() string {
 		var name string
 		switch {
 		case i == m.cursor:
-			name = m.styles.StationCursor.Render(s.Name)
+			name = m.styles.Cursor.Render(s.Name)
 		case i == m.playingIdx:
 			name = m.styles.StationPlaying.Render(s.Name)
 		default:
