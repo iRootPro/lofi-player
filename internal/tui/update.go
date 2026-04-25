@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/pomodoro"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
@@ -16,6 +18,12 @@ const volumeStep = 5
 // any commands to run. Receiver is by value; never mutate m through a
 // pointer (plan §4.2).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Modal states intercept input first so the form can capture text
+	// without the global keymap stealing characters like 'q' or 'p'.
+	if m.mode == modeAddStation {
+		return m.updateAddStation(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -115,6 +123,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Pomodoro):
 		return m.togglePomodoro()
 
+	case key.Matches(msg, m.keys.AddStation):
+		m.modePrev = m.mode
+		m.mode = modeAddStation
+		m.addForm = newAddStationForm()
+		// Tell bubbles/textinput to start its cursor blink.
+		return m, m.addForm.name.Cursor.BlinkCmd()
+
 	case key.Matches(msg, m.keys.Help):
 		m.showFullHelp = !m.showFullHelp
 		return m, nil
@@ -131,6 +146,41 @@ func (m *Model) startVolumeAnim(playerCmd tea.Cmd) tea.Cmd {
 	}
 	m.volumeAnimating = true
 	return tea.Batch(playerCmd, tickVolAnim())
+}
+
+// updateAddStation routes input to the add-station modal form. On
+// submission the new station is appended to cfg.Stations and the
+// config file is rewritten; on cancellation no state changes.
+func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
+	form, result, stillOpen, cmd := m.addForm.update(msg)
+	m.addForm = form
+	if stillOpen {
+		return m, cmd
+	}
+
+	// Form closed. Restore the previous layout.
+	m.mode = m.modePrev
+	if result.Cancelled {
+		return m, nil
+	}
+
+	// Append, persist, point cursor at new station.
+	m.cfg.Stations = append(m.cfg.Stations, result.Station)
+	m.cursor = len(m.cfg.Stations) - 1
+
+	if err := config.Save(m.cfg); err != nil {
+		m.toast = &Toast{
+			Message: fmt.Sprintf("station added in memory but config save failed: %v", err),
+			Kind:    ToastError,
+		}
+		return m, clearToastAfter()
+	}
+
+	m.toast = &Toast{
+		Message: "added: " + result.Station.Name,
+		Kind:    ToastSuccess,
+	}
+	return m, clearToastAfter()
 }
 
 // togglePomodoro starts a focus session if idle, otherwise stops the

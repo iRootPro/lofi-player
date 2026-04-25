@@ -36,12 +36,13 @@ type Options struct {
 	Stats pomodoro.Stats
 }
 
-// viewMode chooses between full and mini layouts.
+// viewMode chooses between full, mini, and modal layouts.
 type viewMode int
 
 const (
 	modeFull viewMode = iota
 	modeMini
+	modeAddStation
 )
 
 // Model is the root Bubble Tea model.
@@ -80,6 +81,12 @@ type Model struct {
 	width, height int
 	showFullHelp  bool
 	mode          viewMode
+
+	// modePrev is the layout to restore when a modal (modeAddStation)
+	// closes. modeFull during everyday usage; modeMini if the modal
+	// was opened from compact mode.
+	modePrev viewMode
+	addForm  addStationForm
 }
 
 // NewModel constructs the root model. NewModel does not take ownership

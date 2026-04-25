@@ -15,6 +15,7 @@ type KeyMap struct {
 	ThemeCycle key.Binding
 	Mini       key.Binding
 	Pomodoro   key.Binding
+	AddStation key.Binding
 	Help       key.Binding
 	Quit       key.Binding
 }
@@ -56,6 +57,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("p"),
 			key.WithHelp("p", "pomodoro"),
 		),
+		AddStation: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "add station"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -69,13 +74,13 @@ func DefaultKeyMap() KeyMap {
 
 // ShortHelp returns the bindings shown in the compact help bar.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.PlayPause, k.Down, k.VolUp, k.Pomodoro, k.ThemeCycle, k.Mini, k.Help, k.Quit}
+	return []key.Binding{k.PlayPause, k.Down, k.VolUp, k.AddStation, k.Pomodoro, k.ThemeCycle, k.Mini, k.Help, k.Quit}
 }
 
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down},
+		{k.Up, k.Down, k.AddStation},
 		{k.PlayPause, k.VolUp, k.VolDown},
 		{k.Pomodoro, k.ThemeCycle, k.Mini},
 		{k.Help, k.Quit},

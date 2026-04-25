@@ -62,11 +62,17 @@ set -g status-right '#(lofi-player --statusline)'
 | `space`        | Play / pause selected station     |
 | `+` / `=`      | Volume up (5%, spring-animated)   |
 | `-` / `_`      | Volume down (5%, spring-animated) |
+| `a`            | Add station (modal form)          |
 | `p`            | Start / stop pomodoro session     |
 | `t`            | Cycle theme                       |
 | `m`            | Toggle mini mode                  |
 | `?`            | Toggle compact / full help card   |
 | `q` / `ctrl+c` | Quit                              |
+
+Adding stations: press `a` to open a modal form (name + URL). Tab cycles
+fields, Enter saves to `config.yaml`, Esc cancels. The `kind` is
+auto-detected from the URL (`youtube.com` / `youtu.be` → `youtube`,
+otherwise `stream`).
 
 ## Configuration
 

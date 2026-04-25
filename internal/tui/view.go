@@ -32,10 +32,29 @@ func (m Model) View() string {
 	if m.width == 0 {
 		return ""
 	}
-	if m.mode == modeMini {
+	switch m.mode {
+	case modeMini:
 		return m.viewMini()
+	case modeAddStation:
+		return m.viewAddStation()
+	default:
+		return m.viewFull()
 	}
-	return m.viewFull()
+}
+
+// viewAddStation overlays the add-station modal on top of whichever
+// layout was active when `a` was pressed, so the user keeps visual
+// context (now-playing, station list) while typing.
+func (m Model) viewAddStation() string {
+	// Render the previous layout as the backdrop.
+	var backdrop string
+	if m.modePrev == modeMini {
+		backdrop = m.viewMini()
+	} else {
+		backdrop = m.viewFull()
+	}
+	form := m.addForm.view(m.width, m.styles, m.theme.Muted)
+	return backdrop + "\n\n" + form
 }
 
 func (m Model) viewFull() string {
