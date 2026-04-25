@@ -24,7 +24,7 @@ const (
 // Terminals without a Nerd Font will render these as tofu boxes;
 // the trade-off is documented in the README.
 const (
-	iconLogo     = "" //  music
+	iconLogo     = "" //  headphones
 	iconVolume   = "󰕿" //  volume-high (Material Design)
 	iconStations = "" //  list
 )
