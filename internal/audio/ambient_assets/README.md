@@ -9,8 +9,10 @@ runtime to `$XDG_CACHE_HOME/lofi-player/ambient/` (or
 | rain.opus | [freesound.org/s/525046](https://freesound.org/s/525046/) | speakwithanimals | CC0 |
 | fire.opus | [freesound.org/s/760474](https://freesound.org/s/760474/) | True_Killian | CC0 |
 | white_noise.opus | [freesound.org/s/132275](https://freesound.org/s/132275/) | assett1 | CC0 |
+| cafe.opus | [freesound.org/s/32910](https://freesound.org/s/32910/) | ToddBradley | CC0 |
+| thunder.opus | [freesound.org/s/717890](https://freesound.org/s/717890/) | TRP | CC0 |
 
-All three sources are CC0 (public domain) — no attribution legally
+All five sources are CC0 (public domain) — no attribution legally
 required, but credited above as a courtesy and so future contributors
 can re-find them. Encoded to Opus 64 kbps stereo for size.
 
@@ -36,6 +38,17 @@ ffmpeg -i ~/Downloads/760474__true_killian__fireplace.m4a \
 ffmpeg -ss 2160 -t 240 -i ~/Downloads/132275__assett1__74-minutes-of-relaxing-soft-noise.mp3 \
   -map 0:a -af "afade=t=in:st=0:d=2,afade=t=out:st=237:d=3,loudnorm=I=-23:LRA=7" \
   -c:a libopus -b:a 64k -ac 2 -y white_noise.opus
+
+# cafe — 4-minute slice from t=30s of the 5:35 source (mono input,
+# upmixed to stereo by libopus).
+ffmpeg -ss 30 -t 240 -i ~/Downloads/32910__toddbradley__general-ambience-from-bar.wav \
+  -af "afade=t=in:st=0:d=2,afade=t=out:st=237:d=3,loudnorm=I=-23:LRA=7" \
+  -c:a libopus -b:a 64k -ac 2 -y cafe.opus
+
+# thunder — 4-minute slice from t=5s of the 4:07 source.
+ffmpeg -ss 5 -t 240 -i ~/Downloads/717890__trp__230823-thunder-dry-distant-rolling-r-07-em272s-stratford-12pm.mp3 \
+  -af "afade=t=in:st=0:d=2,afade=t=out:st=237:d=3,loudnorm=I=-23:LRA=7" \
+  -c:a libopus -b:a 64k -ac 2 -y thunder.opus
 ```
 
 To swap a file later: keep the same filename, drop the new `.opus` (or

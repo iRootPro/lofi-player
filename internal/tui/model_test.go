@@ -239,8 +239,9 @@ func TestStationLineShowsActiveAmbient(t *testing.T) {
 	_ = am.SetVolume("rain", 40)
 
 	out := m.renderNowPlaying()
-	if !strings.Contains(out, "🌧️") {
-		t.Errorf("expected rain icon in station line:\n%s", out)
+	rainCh, _ := am.Channel("rain")
+	if !strings.Contains(out, rainCh.Icon) {
+		t.Errorf("expected rain icon %q in station line:\n%s", rainCh.Icon, out)
 	}
 }
 
@@ -248,8 +249,11 @@ func TestStationLineHidesIndicatorWhenSilent(t *testing.T) {
 	m := fixture()
 	m.playingIdx = 0
 	out := m.renderNowPlaying()
-	if strings.Contains(out, "🌧️") || strings.Contains(out, "🔥") || strings.Contains(out, "⚪") {
-		t.Errorf("ambient icons leaked to silent station line:\n%s", out)
+	for _, id := range m.mixer.ChannelIDs() {
+		ch, _ := m.mixer.Channel(id)
+		if strings.Contains(out, ch.Icon) {
+			t.Errorf("ambient icon %q (%s) leaked to silent station line:\n%s", ch.Icon, id, out)
+		}
 	}
 }
 

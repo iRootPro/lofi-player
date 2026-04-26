@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-func TestNewAmbientMixerHasThreeChannelsInFixedOrder(t *testing.T) {
+func TestAmbientMixerChannelOrder(t *testing.T) {
 	m := NewAmbientMixer()
 	got := m.ChannelIDs()
-	want := []string{"rain", "fire", "white_noise"}
+	want := []string{"rain", "fire", "white_noise", "cafe", "thunder"}
 	if len(got) != len(want) {
 		t.Fatalf("ChannelIDs: got %d, want %d", len(got), len(want))
 	}
@@ -32,6 +32,8 @@ func TestAmbientChannelMetadata(t *testing.T) {
 		{"rain", "rain"},
 		{"fire", "fire"},
 		{"white_noise", "white noise"},
+		{"cafe", "cafe"},
+		{"thunder", "thunder"},
 	}
 	for _, c := range cases {
 		ch, ok := m.Channel(c.id)

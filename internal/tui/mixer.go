@@ -126,9 +126,12 @@ func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected
 		cursor = styles.Cursor.Render("> ")
 	}
 	label := fmt.Sprintf("%-12s", ch.Label)
+	// Icon picks up the brand Primary tone like the logo / volume / stations
+	// glyphs so the modal sits in the same visual family as the main view.
+	icon := styles.AppTitle.Render(ch.Icon)
 
 	if disabled {
-		return cursor + ch.Icon + "  " + styles.Hint.Render(label) + styles.Hint.Render("unavailable")
+		return cursor + icon + "  " + styles.Hint.Render(label) + styles.Hint.Render("unavailable")
 	}
 
 	fill := v * mixerBarWidth / 100
@@ -136,13 +139,16 @@ func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected
 		styles.VolEmpty.Render(strings.Repeat("▱", mixerBarWidth-fill))
 	value := fmt.Sprintf("%3d", v)
 
+	// Selected row uses Cursor's color but explicitly drops Bold so the
+	// label doesn't out-weigh the small Nerd Font icon next to it.
 	switch {
 	case selected:
-		return cursor + ch.Icon + "  " + styles.Cursor.Render(label) + bar + "  " + styles.Cursor.Render(value)
+		labelStyle := styles.Cursor.Bold(false)
+		return cursor + icon + "  " + labelStyle.Render(label) + bar + "  " + labelStyle.Render(value)
 	case v == 0:
-		return cursor + ch.Icon + "  " + styles.Hint.Render(label) + bar + "  " + styles.Hint.Render(value)
+		return cursor + icon + "  " + styles.Hint.Render(label) + bar + "  " + styles.Hint.Render(value)
 	default:
-		return cursor + ch.Icon + "  " + styles.StationItem.Render(label) + bar + "  " + styles.StationItem.Render(value)
+		return cursor + icon + "  " + styles.StationItem.Render(label) + bar + "  " + styles.StationItem.Render(value)
 	}
 }
 

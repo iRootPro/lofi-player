@@ -513,5 +513,5 @@ func (m Model) renderAmbientIndicator() string {
 	if len(icons) == 0 {
 		return ""
 	}
-	return m.styles.SectionHeader.Render("· ") + m.styles.AppTitle.Render(strings.Join(icons, ""))
+	return m.styles.SectionHeader.Render("· ") + m.styles.AppTitle.Render(strings.Join(icons, " "))
 }

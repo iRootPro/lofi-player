@@ -25,10 +25,16 @@ type AmbientChannel struct {
 	asset string
 }
 
+// Icons are Nerd Font Material Design glyphs — thin, detailed, and
+// consistent in weight with the music-note logo and the stations list
+// glyph used elsewhere in the UI. Wrapped in styles.AppTitle so they
+// pick up the brand Primary tone.
 var ambientChannels = []AmbientChannel{
-	{ID: "rain", Label: "rain", Icon: "🌧️", asset: "rain.opus"},
-	{ID: "fire", Label: "fire", Icon: "🔥", asset: "fire.opus"},
-	{ID: "white_noise", Label: "white noise", Icon: "⚪", asset: "white_noise.opus"},
+	{ID: "rain", Label: "rain", Icon: "󰖖", asset: "rain.opus"},        // mdi-weather-pouring
+	{ID: "fire", Label: "fire", Icon: "󰈸", asset: "fire.opus"},        // mdi-fire
+	{ID: "white_noise", Label: "white noise", Icon: "󰥛", asset: "white_noise.opus"}, // mdi-sine-wave
+	{ID: "cafe", Label: "cafe", Icon: "󰅶", asset: "cafe.opus"},        // mdi-coffee
+	{ID: "thunder", Label: "thunder", Icon: "󰙾", asset: "thunder.opus"}, // mdi-weather-lightning-rainy
 }
 
 type runtimeChannel struct {

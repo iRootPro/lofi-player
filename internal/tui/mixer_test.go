@@ -23,27 +23,22 @@ func TestMixerModelNilMixerReturnsEmpty(t *testing.T) {
 }
 
 func TestMixerModelNavigationJK(t *testing.T) {
+	// Channel order: rain, fire, white_noise, cafe, thunder.
 	mm := newMixerModel(audio.NewAmbientMixer())
-	mm = mm.handle("j")
-	if got := mm.Selected(); got != "fire" {
-		t.Errorf("after j: got %q, want fire", got)
+	want := []string{"fire", "white_noise", "cafe", "thunder", "thunder"}
+	for i, w := range want {
+		mm = mm.handle("j")
+		if got := mm.Selected(); got != w {
+			t.Errorf("after %d j-presses: got %q, want %q", i+1, got, w)
+		}
 	}
-	mm = mm.handle("j")
-	if got := mm.Selected(); got != "white_noise" {
-		t.Errorf("after jj: got %q, want white_noise", got)
-	}
-	mm = mm.handle("j") // clamp
-	if got := mm.Selected(); got != "white_noise" {
-		t.Errorf("after jjj clamp: got %q", got)
-	}
-	mm = mm.handle("k")
-	if got := mm.Selected(); got != "fire" {
-		t.Errorf("after k: got %q", got)
-	}
-	mm = mm.handle("k")
-	mm = mm.handle("k") // clamp
-	if got := mm.Selected(); got != "rain" {
-		t.Errorf("after kkk clamp: got %q", got)
+	// Walk back up: thunder → cafe → white_noise → fire → rain → rain (clamp)
+	wantBack := []string{"cafe", "white_noise", "fire", "rain", "rain"}
+	for i, w := range wantBack {
+		mm = mm.handle("k")
+		if got := mm.Selected(); got != w {
+			t.Errorf("after %d k-presses: got %q, want %q", i+1, got, w)
+		}
 	}
 }
 
