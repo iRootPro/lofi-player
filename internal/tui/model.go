@@ -77,10 +77,10 @@ type Model struct {
 	// and is cheap.
 	pulseDim bool
 
-	// eq drives the decorative equalizer rendered next to the now-
-	// playing card. Phases advance only while a station is actively
-	// playing; on pause the bars freeze on their last frame.
-	eq equalizer
+	// logo drives the shimmer that runs across the ASCII logo
+	// rendered next to the now-playing card. The tick advances
+	// only while playing, so the shimmer freezes on pause.
+	logo logo
 
 	autoplayURL string
 
@@ -138,7 +138,6 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		loading:     loading,
 		volume:      volume,
 		spinner:     sp,
-		eq:          newEqualizer(),
 		autoplayURL: autoplayURL,
 	}
 }
@@ -148,7 +147,7 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 // indicator pulse tick loops. If the model was constructed with an
 // AutoplayStation, the corresponding playCmd is also dispatched.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), equalizerTick()}
+	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick()}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
 	}

@@ -100,14 +100,14 @@ func pulseTick() tea.Cmd {
 	})
 }
 
-// equalizerInterval controls the decorative equalizer cadence. ~8 Hz
-// is fast enough to feel alive without flicker, and cheap enough to
-// run alongside the existing spinner and pulse ticks.
-const equalizerInterval = 120 * time.Millisecond
+// logoInterval controls how fast the logo shimmer crest advances.
+// 150 ms / cell ≈ 6.7 cells/sec — slow enough to read as "calm
+// glow" rather than the strobing of a faster animation.
+const logoInterval = 150 * time.Millisecond
 
-// equalizerTick schedules the next equalizerTickMsg.
-func equalizerTick() tea.Cmd {
-	return tea.Tick(equalizerInterval, func(time.Time) tea.Msg {
-		return equalizerTickMsg{}
+// logoTick schedules the next logoTickMsg.
+func logoTick() tea.Cmd {
+	return tea.Tick(logoInterval, func(time.Time) tea.Msg {
+		return logoTickMsg{}
 	})
 }

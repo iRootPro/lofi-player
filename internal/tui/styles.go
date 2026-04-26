@@ -35,13 +35,13 @@ type Styles struct {
 	HelpSep   lipgloss.Style
 	HelpGroup lipgloss.Style
 	Hint      lipgloss.Style
-	// EqHigh / EqMid / EqLow color the decorative equalizer bars by
-	// height: peaks pick up the brand Primary, mid-range Secondary,
-	// and the quiet base sits in Muted so the composition reads as
-	// layered rather than flat.
-	EqHigh lipgloss.Style
-	EqMid  lipgloss.Style
-	EqLow  lipgloss.Style
+	// LogoCrest / LogoMid / LogoBase paint the shimmer that sweeps
+	// across the ASCII logo. Crest is the brightest (the wave
+	// peak), Mid is the soft halo around it, Base is the dim rest
+	// of the logo — three soft bands rather than a hard spotlight.
+	LogoCrest lipgloss.Style
+	LogoMid   lipgloss.Style
+	LogoBase  lipgloss.Style
 }
 
 // NewStyles builds Styles from a Theme. Bold is reserved for the app title
@@ -76,8 +76,8 @@ func NewStyles(t theme.Theme) Styles {
 		HelpSep:        muted,
 		HelpGroup:      muted,
 		Hint:           muted,
-		EqHigh:         lipgloss.NewStyle().Foreground(t.Primary),
-		EqMid:          lipgloss.NewStyle().Foreground(t.Secondary),
-		EqLow:          muted,
+		LogoCrest:      lipgloss.NewStyle().Foreground(t.Primary),
+		LogoMid:        lipgloss.NewStyle().Foreground(t.Secondary),
+		LogoBase:       muted,
 	}
 }

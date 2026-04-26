@@ -17,14 +17,14 @@ const (
 	// element of the screen; an 80-cell width keeps it readable
 	// without floating in negative space on a 200-cell terminal.
 	nowPlayingMaxWidth = 80
-	// equalizerSidePadding is the gap between the equalizer's right
-	// edge and the inner border of the frame. Two cells let the bars
-	// breathe rather than crowding the rounded border.
-	equalizerSidePadding = 2
-	// equalizerMinGutter is the minimum spacer between the now-
-	// playing block and the equalizer. Below this the equalizer is
-	// dropped to avoid visual collision with the track text.
-	equalizerMinGutter = 2
+	// logoSidePadding is the gap between the logo's right edge and
+	// the inner border of the frame. Two cells let the art breathe
+	// rather than crowding the rounded border.
+	logoSidePadding = 2
+	// logoMinGutter is the minimum spacer between the now-playing
+	// block and the logo. Below this the logo is dropped to avoid
+	// visual collision with the track text.
+	logoMinGutter = 2
 )
 
 // Nerd Font icons (FontAwesome subset, PUA range U+F000–U+F8FF).
@@ -133,20 +133,20 @@ func (m Model) viewFull() string {
 }
 
 // renderTopBlock joins the now-playing card on the left with the
-// decorative equalizer on the right. The equalizer is right-aligned
-// inside the frame's inner area and is dropped on terminals too
-// narrow to fit it next to the track text without overlap.
+// shimmering logo on the right. The logo is right-aligned inside
+// the frame's inner area and is dropped on terminals too narrow to
+// fit it next to the track text without overlap.
 func (m Model) renderTopBlock() string {
 	left := m.renderNowPlaying()
-	right := m.renderEqualizer()
+	right := m.renderLogo()
 	if right == "" {
 		return left
 	}
 
 	leftWidth := lipgloss.Width(left)
 	rightWidth := lipgloss.Width(right)
-	gutter := m.width - leftWidth - rightWidth - equalizerSidePadding
-	if gutter < equalizerMinGutter {
+	gutter := m.width - leftWidth - rightWidth - logoSidePadding
+	if gutter < logoMinGutter {
 		return left
 	}
 	spacer := strings.Repeat(" ", gutter)
@@ -289,43 +289,52 @@ func truncateRunes(s string, maxWidth int) string {
 	return "…"
 }
 
-// renderEqualizer renders a two-line block of vertical animated bars
-// to sit next to the now-playing card. Returns "" when nothing is
-// playing — JoinHorizontal in renderTopBlock then collapses to just
-// the now-playing block, matching the pre-equalizer behaviour for
-// that state. The audio backend (mpv via JSON-IPC) doesn't expose
-// PCM, so the animation is driven by phase math, not real spectrum.
-func (m Model) renderEqualizer() string {
+// renderLogo renders the static "lofi" ASCII art with a soft
+// shimmer wave sweeping across it. Returns "" when no station is
+// selected so the right-side area collapses cleanly back to just
+// the now-playing block in that state.
+func (m Model) renderLogo() string {
 	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
 		return ""
 	}
 
-	heights := m.eq.heights(m.loading)
+	width := lipgloss.Width(logoLines[0])
+	crest := m.logo.crestColumn(width)
 
-	var top, bot strings.Builder
-	for i, h := range heights {
-		if i > 0 {
-			top.WriteRune(' ')
-			bot.WriteRune(' ')
+	var out strings.Builder
+	for li, line := range logoLines {
+		if li > 0 {
+			out.WriteByte('\n')
 		}
-		topGlyph, botGlyph := equalizerGlyphs(h)
-		style := equalizerBarStyle(m.styles, h)
-		top.WriteString(style.Render(string(topGlyph)))
-		bot.WriteString(style.Render(string(botGlyph)))
+		col := 0
+		for _, r := range line {
+			if r == ' ' {
+				out.WriteRune(' ')
+				col++
+				continue
+			}
+			out.WriteString(logoCellStyle(m.styles, col-crest).Render(string(r)))
+			col++
+		}
 	}
-	return top.String() + "\n" + bot.String()
+	return out.String()
 }
 
-// equalizerBarStyle picks a colour band by height: peaks pick up the
-// brand Primary, mid-range Secondary, low/quiet bars Muted.
-func equalizerBarStyle(s Styles, h int) lipgloss.Style {
+// logoCellStyle picks a colour band by signed distance from the
+// shimmer crest: 0 is the bright peak, ±1..±halo is the soft halo,
+// the rest stays on the muted base — three soft bands with no hard
+// edge to the lit zone.
+func logoCellStyle(s Styles, dist int) lipgloss.Style {
+	if dist < 0 {
+		dist = -dist
+	}
 	switch {
-	case h >= 6:
-		return s.EqHigh
-	case h >= 3:
-		return s.EqMid
+	case dist == 0:
+		return s.LogoCrest
+	case dist <= logoShimmerHalo:
+		return s.LogoMid
 	default:
-		return s.EqLow
+		return s.LogoBase
 	}
 }
 

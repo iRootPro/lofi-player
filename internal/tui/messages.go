@@ -35,7 +35,8 @@ type clearToastMsg struct{}
 // "alive" pulse while a station is actively playing.
 type pulseTickMsg struct{}
 
-// equalizerTickMsg drives the decorative equalizer animation. The
-// tick runs globally; the Update handler decides whether to advance
-// the bars (only while playing) before re-arming.
-type equalizerTickMsg struct{}
+// logoTickMsg drives the shimmer that sweeps across the ASCII logo
+// next to the now-playing card. The tick runs globally; Update
+// advances the logo's internal counter only while playing so the
+// shimmer freezes on pause without breaking the tick chain.
+type logoTickMsg struct{}
