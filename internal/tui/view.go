@@ -17,6 +17,14 @@ const (
 	// element of the screen; an 80-cell width keeps it readable
 	// without floating in negative space on a 200-cell terminal.
 	nowPlayingMaxWidth = 80
+	// logoSidePadding is the gap between the logo's right edge and
+	// the inner border of the frame. Two cells let the art breathe
+	// rather than crowding the rounded border.
+	logoSidePadding = 2
+	// logoMinGutter is the minimum spacer between the now-playing
+	// block and the logo. Below this the logo is dropped to avoid
+	// visual collision with the track text.
+	logoMinGutter = 2
 )
 
 // Nerd Font icons (FontAwesome subset, PUA range U+F000–U+F8FF).
@@ -128,15 +136,38 @@ func (m Model) viewAddStation() string {
 }
 
 func (m Model) viewFull() string {
+	body := m.renderBody()
+	if extra := m.renderTransientFooter(); extra != "" {
+		return body + "\n\n" + extra
+	}
+	return body
+}
+
+// renderBody composes the main left content (now-playing card +
+// stations list) with the shimmering logo on the right, centering
+// the logo vertically against the full height of the left column
+// rather than pinning it to the top. On terminals too narrow to
+// fit the logo next to the body without overlap, it is dropped.
+func (m Model) renderBody() string {
 	var b strings.Builder
 	b.WriteString(m.renderNowPlaying())
 	b.WriteString("\n\n")
 	b.WriteString(m.renderStations())
-	if extra := m.renderTransientFooter(); extra != "" {
-		b.WriteString("\n\n")
-		b.WriteString(extra)
+	left := b.String()
+
+	logo := m.renderLogo()
+	if logo == "" {
+		return left
 	}
-	return b.String()
+
+	leftWidth := lipgloss.Width(left)
+	logoWidth := lipgloss.Width(logo)
+	gutter := m.width - leftWidth - logoWidth - logoSidePadding
+	if gutter < logoMinGutter {
+		return left
+	}
+	spacer := strings.Repeat(" ", gutter)
+	return lipgloss.JoinHorizontal(lipgloss.Center, left, spacer, logo)
 }
 
 // viewMini renders the compact layout suitable for living in a tmux
@@ -278,6 +309,55 @@ func truncateRunes(s string, maxWidth int) string {
 	return "…"
 }
 
+// renderLogo renders the static "lofi" ASCII art with a soft
+// shimmer wave sweeping across it. Returns "" when no station is
+// selected so the right-side area collapses cleanly back to just
+// the now-playing block in that state.
+func (m Model) renderLogo() string {
+	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+		return ""
+	}
+
+	width := lipgloss.Width(logoLines[0])
+	crest := m.logo.crestColumn(width)
+
+	var out strings.Builder
+	for li, line := range logoLines {
+		if li > 0 {
+			out.WriteByte('\n')
+		}
+		col := 0
+		for _, r := range line {
+			if r == ' ' {
+				out.WriteRune(' ')
+				col++
+				continue
+			}
+			out.WriteString(logoCellStyle(m.styles, col-crest).Render(string(r)))
+			col++
+		}
+	}
+	return out.String()
+}
+
+// logoCellStyle picks a colour band by signed distance from the
+// shimmer crest: 0 is the bright peak, ±1..±halo is the soft halo,
+// the rest stays on the muted base — three soft bands with no hard
+// edge to the lit zone.
+func logoCellStyle(s Styles, dist int) lipgloss.Style {
+	if dist < 0 {
+		dist = -dist
+	}
+	switch {
+	case dist == 0:
+		return s.LogoCrest
+	case dist <= logoShimmerHalo:
+		return s.LogoMid
+	default:
+		return s.LogoBase
+	}
+}
+
 // renderVolume composes the volume widget — speaker icon followed by
 // the fill bar. Lives as the right-side label in the frame's top
 // border. The bar is enough on its own; the digit/percent text was
@@ -409,7 +489,6 @@ func (m Model) renderFullHelp() string {
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
 }
-
 
 // renderAmbientIndicator returns a compact "· 🌧️🔥" tag composed of
 // active-channel icons in canonical order, separated from the station

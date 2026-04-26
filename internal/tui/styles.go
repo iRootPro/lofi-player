@@ -29,12 +29,19 @@ type Styles struct {
 	// pink used for error indicators and "press a" hints) so the
 	// cursor's blue doesn't conflict with the green playing dot when
 	// they share a row.
-	Cursor lipgloss.Style
-	HelpKey        lipgloss.Style
-	HelpDesc       lipgloss.Style
-	HelpSep        lipgloss.Style
-	HelpGroup      lipgloss.Style
-	Hint           lipgloss.Style
+	Cursor    lipgloss.Style
+	HelpKey   lipgloss.Style
+	HelpDesc  lipgloss.Style
+	HelpSep   lipgloss.Style
+	HelpGroup lipgloss.Style
+	Hint      lipgloss.Style
+	// LogoCrest / LogoMid / LogoBase paint the shimmer that sweeps
+	// across the ASCII logo. Crest is the brightest (the wave
+	// peak), Mid is the soft halo around it, Base is the dim rest
+	// of the logo — three soft bands rather than a hard spotlight.
+	LogoCrest lipgloss.Style
+	LogoMid   lipgloss.Style
+	LogoBase  lipgloss.Style
 }
 
 // NewStyles builds Styles from a Theme. Bold is reserved for the app title
@@ -42,23 +49,23 @@ type Styles struct {
 func NewStyles(t theme.Theme) Styles {
 	muted := lipgloss.NewStyle().Foreground(t.Muted)
 	return Styles{
-		AppTitle:       lipgloss.NewStyle().Foreground(t.Primary),
+		AppTitle: lipgloss.NewStyle().Foreground(t.Primary),
 		// Clock sits as a quiet auxiliary in the top-right; the muted
 		// tone keeps it from competing with the brand on the left.
-		Clock: muted,
-		StationName:    lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
-		StatusLive:     lipgloss.NewStyle().Foreground(t.Success),
-		StatusPaused:   muted,
+		Clock:        muted,
+		StationName:  lipgloss.NewStyle().Foreground(t.Secondary).Bold(true),
+		StatusLive:   lipgloss.NewStyle().Foreground(t.Success),
+		StatusPaused: muted,
 		// VolLabel matches the fill color so the speaker icon and the
 		// filled cells read as one unified volume widget.
-		VolLabel:       lipgloss.NewStyle().Foreground(t.Primary),
-		VolFill:        lipgloss.NewStyle().Foreground(t.Primary),
+		VolLabel: lipgloss.NewStyle().Foreground(t.Primary),
+		VolFill:  lipgloss.NewStyle().Foreground(t.Primary),
 		// VolEmpty is the placeholder track behind the fill cells.
 		// Muted (lighter than Subtle) keeps the empty segments visible
 		// against the dark background so the bar reads as "fill on a
 		// rail" rather than disappearing into negative space.
-		VolEmpty:   lipgloss.NewStyle().Foreground(t.Muted),
-		VolPercent: lipgloss.NewStyle().Foreground(t.Info),
+		VolEmpty:       lipgloss.NewStyle().Foreground(t.Muted),
+		VolPercent:     lipgloss.NewStyle().Foreground(t.Info),
 		SectionHeader:  muted,
 		StationItem:    lipgloss.NewStyle().Foreground(t.Foreground),
 		StationCursor:  lipgloss.NewStyle().Foreground(t.Accent).Bold(true),
@@ -69,5 +76,8 @@ func NewStyles(t theme.Theme) Styles {
 		HelpSep:        muted,
 		HelpGroup:      muted,
 		Hint:           muted,
+		LogoCrest:      lipgloss.NewStyle().Foreground(t.Primary),
+		LogoMid:        lipgloss.NewStyle().Foreground(t.Secondary),
+		LogoBase:       muted,
 	}
 }

@@ -40,3 +40,9 @@ type pulseTickMsg struct{}
 // handler ignores stale ticks (msg.seq < current seq) so a held key
 // collapses to a single save once the user lets go.
 type ambientSaveTickMsg struct{ seq int }
+
+// logoTickMsg drives the shimmer that sweeps across the ASCII logo
+// next to the now-playing card. The tick runs globally; Update
+// advances the logo's internal counter only while playing so the
+// shimmer freezes on pause without breaking the tick chain.
+type logoTickMsg struct{}

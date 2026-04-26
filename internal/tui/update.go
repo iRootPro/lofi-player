@@ -91,6 +91,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pulseTickMsg:
 		m.pulseDim = !m.pulseDim
 		return m, pulseTick()
+
+	case logoTickMsg:
+		// Re-arm unconditionally so the chain stays alive across
+		// pause/resume; only advance the shimmer while playing so
+		// it freezes (rather than crawls) when paused.
+		if m.playing {
+			m.logo.advance()
+		}
+		return m, logoTick()
 	}
 	return m, nil
 }

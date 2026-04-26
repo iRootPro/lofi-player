@@ -83,6 +83,11 @@ type Model struct {
 	// and is cheap.
 	pulseDim bool
 
+	// logo drives the shimmer that runs across the ASCII logo
+	// rendered next to the now-playing card. The tick advances
+	// only while playing, so the shimmer freezes on pause.
+	logo logo
+
 	autoplayURL string
 
 	width, height int
@@ -161,7 +166,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 // indicator pulse tick loops. If the model was constructed with an
 // AutoplayStation, the corresponding playCmd is also dispatched.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick()}
+	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick()}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
 	}

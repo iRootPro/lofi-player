@@ -114,3 +114,15 @@ func ambientSaveTick(seq int) tea.Cmd {
 		return ambientSaveTickMsg{seq: seq}
 	})
 }
+
+// logoInterval controls how fast the logo shimmer crest advances.
+// 150 ms / cell ≈ 6.7 cells/sec — slow enough to read as "calm
+// glow" rather than the strobing of a faster animation.
+const logoInterval = 150 * time.Millisecond
+
+// logoTick schedules the next logoTickMsg.
+func logoTick() tea.Cmd {
+	return tea.Tick(logoInterval, func(time.Time) tea.Msg {
+		return logoTickMsg{}
+	})
+}
