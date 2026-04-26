@@ -12,9 +12,9 @@ package tui
 // shimmer's column math lines up across rows; the leading padding
 // on rows 1 and 3 mirrors the iconLogo + space on row 2.
 var logoLines = [...]string{
-	"   │     ╭───╮ ╭──── ·",
-	iconLogo + "  │     │   │ ├──   │",
-	"   ╰──── ╰───╯ │     │",
+	"   ┃     ┏━━━┓ ┏━━━━ •",
+	iconLogo + "  ┃     ┃   ┃ ┣━━   ┃",
+	"   ┗━━━━ ┗━━━┛ ┃     ┃",
 }
 
 // logoShimmerHalo is the radius (in cells) of the lit zone around

@@ -94,8 +94,8 @@ func TestView_LogoRendersInFullView(t *testing.T) {
 	// `╰` only appears in the logo's L letter and the logo's O,
 	// plus the app frame's bottom-left corner — all paths produce
 	// at least one).
-	if !strings.Contains(out, "╰────") {
-		t.Errorf("view does not contain the logo's `╰────` segment; got:\n%s", out)
+	if !strings.Contains(out, "┗━━━━") {
+		t.Errorf("view does not contain the logo's `┗━━━━` segment; got:\n%s", out)
 	}
 }
 
