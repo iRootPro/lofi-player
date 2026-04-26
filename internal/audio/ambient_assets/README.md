@@ -6,40 +6,39 @@ runtime to `$XDG_CACHE_HOME/lofi-player/ambient/` (or
 
 | file | source | author | license |
 |---|---|---|---|
-| rain.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
-| fire.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
-| white_noise.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
+| rain.opus | [freesound.org/s/525046](https://freesound.org/s/525046/) | speakwithanimals | CC0 |
+| fire.opus | [freesound.org/s/760474](https://freesound.org/s/760474/) | True_Killian | CC0 |
+| white_noise.opus | [freesound.org/s/132275](https://freesound.org/s/132275/) | assett1 | CC0 |
 
-The current loops are synthesized from ffmpeg's `anoisesrc` generator —
-filtered noise textures rather than field recordings. They sound
-recognizably distinct (rain-like vs. low rumble vs. clean static) and
-loop seamlessly because the underlying noise is statistically uniform,
-but they are not literal recordings of rain or fire. For v1.0 release
-consider replacing with real CC0/CC-BY recordings from freesound.org —
-but the synthesized versions are good enough for shipping a first
-release (similar to what mynoise.net and Brain.fm ship as backgrounds).
+All three sources are CC0 (public domain) — no attribution legally
+required, but credited above as a courtesy and so future contributors
+can re-find them. Encoded to Opus 64 kbps stereo for size.
 
-Recipe to regenerate (4 minutes each, ~1.4 MB at 64 kbps Opus stereo):
+Source files are not tracked in this repo; the recipe below
+reproduces the embedded `.opus` files from the originals downloaded
+to `~/Downloads/`. All filters share the same shape: 2-second fade-in,
+3-second fade-out, EBU R128 loudness normalization to -23 LUFS.
 
 ```sh
-# rain — pink noise, high-pass + lowpass to feel like falling water,
-# light tremolo for organic "drops" texture.
-ffmpeg -f lavfi -i "anoisesrc=color=pink:duration=240:sample_rate=44100:amplitude=0.45" \
-  -af "highpass=f=500, lowpass=f=7000, tremolo=f=6:d=0.15, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+# rain — 4-minute slice from t=6:00 of the 13:52 source
+ffmpeg -ss 360 -t 240 -i ~/Downloads/525046__speakwithanimals__rain-slowly-passing-treated-loop_edgewater_06192020.wav \
+  -af "afade=t=in:st=0:d=2,afade=t=out:st=237:d=3,loudnorm=I=-23:LRA=7" \
   -c:a libopus -b:a 64k -ac 2 -y rain.opus
 
-# fire — brown noise, low-passed and slow tremolo for a warm rumble.
-ffmpeg -f lavfi -i "anoisesrc=color=brown:duration=240:sample_rate=44100:amplitude=0.7" \
-  -af "lowpass=f=1500, tremolo=f=0.7:d=0.45, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+# fire — full 1:44 source (short, but a fireplace crackle's loop seam is
+# texture-masked).
+ffmpeg -i ~/Downloads/760474__true_killian__fireplace.m4a \
+  -af "afade=t=in:st=0:d=2,afade=t=out:st=101:d=3,loudnorm=I=-23:LRA=7" \
   -c:a libopus -b:a 64k -ac 2 -y fire.opus
 
-# white noise — brown noise with rumble removed (high-pass at 80 Hz),
-# clean focus background.
-ffmpeg -f lavfi -i "anoisesrc=color=brown:duration=240:sample_rate=44100:amplitude=0.5" \
-  -af "highpass=f=80, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+# white_noise — 4-minute slice from t=36:00 of the 74-minute source
+# (middle is the most stable section).
+ffmpeg -ss 2160 -t 240 -i ~/Downloads/132275__assett1__74-minutes-of-relaxing-soft-noise.mp3 \
+  -map 0:a -af "afade=t=in:st=0:d=2,afade=t=out:st=237:d=3,loudnorm=I=-23:LRA=7" \
   -c:a libopus -b:a 64k -ac 2 -y white_noise.opus
 ```
 
-If you swap any file for a real CC-BY recording later, add the source
-URL, author, and license to the table above and to a root
-`ATTRIBUTIONS.md`.
+To swap a file later: keep the same filename, drop the new `.opus` (or
+re-encode from any source via the recipe above), `go build` — embed
+picks up the new bytes, the on-disk cache auto-invalidates on
+SHA-256 mismatch the next time the app starts.
