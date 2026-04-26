@@ -121,36 +121,38 @@ func (m Model) viewAddStation() string {
 }
 
 func (m Model) viewFull() string {
-	var b strings.Builder
-	b.WriteString(m.renderTopBlock())
-	b.WriteString("\n\n")
-	b.WriteString(m.renderStations())
+	body := m.renderBody()
 	if extra := m.renderTransientFooter(); extra != "" {
-		b.WriteString("\n\n")
-		b.WriteString(extra)
+		return body + "\n\n" + extra
 	}
-	return b.String()
+	return body
 }
 
-// renderTopBlock joins the now-playing card on the left with the
-// shimmering logo on the right. The logo is right-aligned inside
-// the frame's inner area and is dropped on terminals too narrow to
-// fit it next to the track text without overlap.
-func (m Model) renderTopBlock() string {
-	left := m.renderNowPlaying()
-	right := m.renderLogo()
-	if right == "" {
+// renderBody composes the main left content (now-playing card +
+// stations list) with the shimmering logo on the right, centering
+// the logo vertically against the full height of the left column
+// rather than pinning it to the top. On terminals too narrow to
+// fit the logo next to the body without overlap, it is dropped.
+func (m Model) renderBody() string {
+	var b strings.Builder
+	b.WriteString(m.renderNowPlaying())
+	b.WriteString("\n\n")
+	b.WriteString(m.renderStations())
+	left := b.String()
+
+	logo := m.renderLogo()
+	if logo == "" {
 		return left
 	}
 
 	leftWidth := lipgloss.Width(left)
-	rightWidth := lipgloss.Width(right)
-	gutter := m.width - leftWidth - rightWidth - logoSidePadding
+	logoWidth := lipgloss.Width(logo)
+	gutter := m.width - leftWidth - logoWidth - logoSidePadding
 	if gutter < logoMinGutter {
 		return left
 	}
 	spacer := strings.Repeat(" ", gutter)
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, spacer, right)
+	return lipgloss.JoinHorizontal(lipgloss.Center, left, spacer, logo)
 }
 
 // viewMini renders the compact layout suitable for living in a tmux

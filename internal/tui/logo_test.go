@@ -110,7 +110,13 @@ func TestLogoVisual(t *testing.T) {
 		Theme:  "tokyo-night",
 		Volume: 60,
 		Stations: []config.Station{
-			{Name: "Radio Paradise Mellow", URL: "http://x", Kind: config.KindStream},
+			{Name: "SomaFM Groove Salad", URL: "http://a", Kind: config.KindStream},
+			{Name: "SomaFM Drone Zone", URL: "http://b", Kind: config.KindStream},
+			{Name: "SomaFM Deep Space One", URL: "http://c", Kind: config.KindStream},
+			{Name: "Radio Paradise Mellow", URL: "http://d", Kind: config.KindStream},
+			{Name: "Lofi Girl 24/7", URL: "http://e", Kind: config.KindYouTube},
+			{Name: "Наше Радио", URL: "http://f", Kind: config.KindStream},
+			{Name: "Радио Максимум", URL: "http://g", Kind: config.KindStream},
 		},
 	}
 	m := NewModel(cfg, nil, Options{AutoplayStation: -1})
