@@ -6,24 +6,40 @@ runtime to `$XDG_CACHE_HOME/lofi-player/ambient/` (or
 
 | file | source | author | license |
 |---|---|---|---|
-| rain.opus | placeholder | — | — |
-| fire.opus | placeholder | — | — |
-| white_noise.opus | placeholder | — | — |
+| rain.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
+| fire.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
+| white_noise.opus | synthesized (ffmpeg) | this project | original (no third-party content) |
 
-Replace placeholders with real loops before tagging v0.4.0. Targets:
-- Format: Opus in OGG, ~64 kbps stereo
-- Length: 3–5 minutes per loop
-- License: prefer CC0; CC-BY acceptable with attribution here and in
-  root `ATTRIBUTIONS.md`
-- Smooth start/end so the loop seam is inaudible (use ffmpeg `afade` or
-  Audacity crossfade)
+The current loops are synthesized from ffmpeg's `anoisesrc` generator —
+filtered noise textures rather than field recordings. They sound
+recognizably distinct (rain-like vs. low rumble vs. clean static) and
+loop seamlessly because the underlying noise is statistically uniform,
+but they are not literal recordings of rain or fire. For v1.0 release
+consider replacing with real CC0/CC-BY recordings from freesound.org —
+but the synthesized versions are good enough for shipping a first
+release (similar to what mynoise.net and Brain.fm ship as backgrounds).
 
-The current placeholders are 1/2/3-second silent Opus streams generated
-so mpv can decode them in tests; distinct durations keep distinct
-SHA-256s. Recipe to regenerate:
+Recipe to regenerate (4 minutes each, ~1.4 MB at 64 kbps Opus stereo):
 
 ```sh
-ffmpeg -f lavfi -i "anullsrc=r=44100:cl=stereo" -t 1 -c:a libopus -b:a 32k -y rain.opus
-ffmpeg -f lavfi -i "anullsrc=r=44100:cl=stereo" -t 2 -c:a libopus -b:a 32k -y fire.opus
-ffmpeg -f lavfi -i "anullsrc=r=44100:cl=stereo" -t 3 -c:a libopus -b:a 32k -y white_noise.opus
+# rain — pink noise, high-pass + lowpass to feel like falling water,
+# light tremolo for organic "drops" texture.
+ffmpeg -f lavfi -i "anoisesrc=color=pink:duration=240:sample_rate=44100:amplitude=0.45" \
+  -af "highpass=f=500, lowpass=f=7000, tremolo=f=6:d=0.15, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+  -c:a libopus -b:a 64k -ac 2 -y rain.opus
+
+# fire — brown noise, low-passed and slow tremolo for a warm rumble.
+ffmpeg -f lavfi -i "anoisesrc=color=brown:duration=240:sample_rate=44100:amplitude=0.7" \
+  -af "lowpass=f=1500, tremolo=f=0.7:d=0.45, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+  -c:a libopus -b:a 64k -ac 2 -y fire.opus
+
+# white noise — brown noise with rumble removed (high-pass at 80 Hz),
+# clean focus background.
+ffmpeg -f lavfi -i "anoisesrc=color=brown:duration=240:sample_rate=44100:amplitude=0.5" \
+  -af "highpass=f=80, afade=t=in:st=0:d=2, afade=t=out:st=237:d=3, loudnorm=I=-23:LRA=7" \
+  -c:a libopus -b:a 64k -ac 2 -y white_noise.opus
 ```
+
+If you swap any file for a real CC-BY recording later, add the source
+URL, author, and license to the table above and to a root
+`ATTRIBUTIONS.md`.
