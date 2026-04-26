@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 )
 
@@ -24,7 +26,7 @@ func fixture() Model {
 			{Name: "C", URL: "http://c"},
 		},
 	}
-	m := NewModel(cfg, nil, Options{AutoplayStation: -1})
+	m := NewModel(cfg, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return updated.(Model)
 }
@@ -40,6 +42,8 @@ func send(t *testing.T, m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		case "down":
 			msg = tea.KeyMsg{Type: tea.KeyDown}
+		case "esc":
+			msg = tea.KeyMsg{Type: tea.KeyEsc}
 		default:
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		}
@@ -64,7 +68,7 @@ func TestView_RendersWhenSized(t *testing.T) {
 }
 
 func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
-	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, Options{AutoplayStation: -1})
+	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	if got := m.View(); got != "" {
 		t.Errorf("View() should be empty before WindowSizeMsg, got %q", got)
 	}
@@ -178,4 +182,218 @@ func TestView_ShowsPlayingMarker(t *testing.T) {
 	if !strings.Contains(out, "◯") {
 		t.Errorf("expected ◯ paused indicator after pause; got:\n%s", out)
 	}
+}
+
+func TestPressXOpensMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x")
+	if m.mode != modeMixer {
+		t.Errorf("mode after x: got %v, want modeMixer", m.mode)
+	}
+}
+
+func TestPressEscClosesMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x", "esc")
+	if m.mode != modeFull {
+		t.Errorf("mode after x+esc: got %v, want modeFull", m.mode)
+	}
+}
+
+func TestPressXAgainClosesMixer(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x", "x")
+	if m.mode != modeFull {
+		t.Errorf("mode after x+x: got %v, want modeFull", m.mode)
+	}
+}
+
+func TestKeyMapHasMixerOpenX(t *testing.T) {
+	km := DefaultKeyMap()
+	for _, k := range km.MixerOpen.Keys() {
+		if k == "x" {
+			return
+		}
+	}
+	t.Error("MixerOpen does not include 'x'")
+}
+
+func TestStationLineShowsActiveAmbient(t *testing.T) {
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	cfg := &config.Config{
+		Theme:    "tokyo-night",
+		Volume:   60,
+		Stations: []config.Station{{Name: "A", URL: "http://a"}},
+	}
+	m := NewModel(cfg, nil, am, Options{AutoplayStation: -1})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m.playingIdx = 0
+	_ = am.SetVolume("rain", 40)
+
+	out := m.renderNowPlaying()
+	if !strings.Contains(out, "🌧️") {
+		t.Errorf("expected rain icon in station line:\n%s", out)
+	}
+}
+
+func TestStationLineHidesIndicatorWhenSilent(t *testing.T) {
+	m := fixture()
+	m.playingIdx = 0
+	out := m.renderNowPlaying()
+	if strings.Contains(out, "🌧️") || strings.Contains(out, "🔥") || strings.Contains(out, "⚪") {
+		t.Errorf("ambient icons leaked to silent station line:\n%s", out)
+	}
+}
+
+func TestGlobalKeysDisabledInMixerModal(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "x") // open mixer
+	if m.mode != modeMixer {
+		t.Fatalf("setup: mode = %v, want modeMixer", m.mode)
+	}
+
+	// Volume key — must not change m.volume while modal is open.
+	originalVolume := m.volume
+	m = send(t, m, "+")
+	if m.volume != originalVolume {
+		t.Errorf("global '+' fired in mixer modal: %d -> %d", originalVolume, m.volume)
+	}
+
+	// Theme cycle — must not swap theme.
+	originalTheme := m.theme.Name
+	m = send(t, m, "t")
+	if m.theme.Name != originalTheme {
+		t.Errorf("global 't' fired in mixer modal: %s -> %s", originalTheme, m.theme.Name)
+	}
+
+	// Help — must not toggle.
+	originalHelp := m.showFullHelp
+	m = send(t, m, "?")
+	if m.showFullHelp != originalHelp {
+		t.Errorf("global '?' fired in mixer modal: %v -> %v", originalHelp, m.showFullHelp)
+	}
+
+	// AddStation — must not switch mode away from modeMixer.
+	m = send(t, m, "a")
+	if m.mode != modeMixer {
+		t.Errorf("global 'a' fired in mixer modal: mode = %v", m.mode)
+	}
+}
+
+func TestAmbientSaveDebounceTickCoalesces(t *testing.T) {
+	saveCalls := 0
+	var lastSnapshot map[string]int
+	cfg := &config.Config{
+		Theme:    "tokyo-night",
+		Volume:   60,
+		Stations: []config.Station{{Name: "A", URL: "http://a"}},
+	}
+
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	m := NewModel(cfg, nil, am, Options{
+		AutoplayStation: -1,
+		SaveAmbient: func(snap map[string]int) error {
+			saveCalls++
+			lastSnapshot = snap
+			return nil
+		},
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	// Two volume changes inside the modal.
+	m = send(t, m, "x") // open mixer
+	m = send(t, m, "l") // bump rain to 5
+	m = send(t, m, "l") // bump rain to 10
+
+	// Stale tick (older seq) — must not save.
+	m1, _ := m.Update(ambientSaveTickMsg{seq: 1})
+	m = m1.(Model)
+	if saveCalls != 0 {
+		t.Errorf("stale tick fired save: %d calls, want 0", saveCalls)
+	}
+
+	// Latest tick — should fire one save with current snapshot.
+	m1, _ = m.Update(ambientSaveTickMsg{seq: m.ambientSaveSeq})
+	m = m1.(Model)
+	if saveCalls != 1 {
+		t.Fatalf("save count after fresh tick: got %d, want 1", saveCalls)
+	}
+	if lastSnapshot["rain"] != 10 {
+		t.Errorf("snapshot: got %+v, want rain=10", lastSnapshot)
+	}
+}
+
+func TestAmbientSaveSkippedWhenCallbackNil(t *testing.T) {
+	m := fixture()
+	// fixture() builds NewModel with Options that don't set SaveAmbient.
+	// A tick with no callback should be a quiet no-op — toast remains
+	// nil and the seq counter is untouched.
+	beforeSeq := m.ambientSaveSeq
+	updated, _ := m.Update(ambientSaveTickMsg{seq: 0})
+	out := updated.(Model)
+	if out.toast != nil {
+		t.Errorf("nil callback produced toast: %+v", out.toast)
+	}
+	if out.ambientSaveSeq != beforeSeq {
+		t.Errorf("ambientSaveSeq mutated: got %d, want %d", out.ambientSaveSeq, beforeSeq)
+	}
+}
+
+func TestAmbientSaveErrorSurfacesAsToast(t *testing.T) {
+	cfg := &config.Config{Theme: "tokyo-night", Volume: 60, Stations: []config.Station{{Name: "A"}}}
+	restore := audio.SetCacheDirForTest(t.TempDir())
+	t.Cleanup(restore)
+	am := audio.NewAmbientMixer()
+	if err := am.Init(); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	t.Cleanup(func() { _ = am.Close() })
+
+	m := NewModel(cfg, nil, am, Options{
+		AutoplayStation: -1,
+		SaveAmbient: func(snap map[string]int) error {
+			return errors.New("disk full")
+		},
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m = send(t, m, "x", "l") // open mixer + one volume bump
+
+	updated, _ = m.Update(ambientSaveTickMsg{seq: m.ambientSaveSeq})
+	m = updated.(Model)
+	if m.toast == nil || m.toast.Kind != ToastError {
+		t.Fatalf("expected error toast, got %+v", m.toast)
+	}
+	if !strings.Contains(m.toast.Message, "disk full") {
+		t.Errorf("toast message missing wrapped err: %q", m.toast.Message)
+	}
+}
+
+func TestMixerKeyReturnsScheduledTick(t *testing.T) {
+	// Sanity check that pressing a mixer key actually returns a non-nil
+	// tea.Cmd so the runtime schedules the debounce tick. The handler
+	// path is covered separately; this guards the wiring.
+	m := fixture()
+	m = send(t, m, "x")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if cmd == nil {
+		t.Error("mixer key produced nil cmd; expected scheduled debounce tick")
+	}
+	_ = updated
 }

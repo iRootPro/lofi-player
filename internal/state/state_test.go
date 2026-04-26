@@ -114,3 +114,60 @@ func TestSave_NilStateRejected(t *testing.T) {
 	}
 }
 
+func TestRoundtripStateWithAmbient(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	in := &State{
+		Theme:           "tokyo-night",
+		Volume:          70,
+		LastStationName: "SomaFM Drone Zone",
+		Ambient:         map[string]int{"rain": 40, "fire": 0, "white_noise": 25},
+	}
+	if err := Save(in); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out := Load()
+	if out.Ambient["rain"] != 40 || out.Ambient["fire"] != 0 || out.Ambient["white_noise"] != 25 {
+		t.Errorf("Ambient roundtrip: %+v", out.Ambient)
+	}
+}
+
+func TestLoadStateWithoutAmbientField(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	p, _ := Path()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	old := []byte(`{"theme":"tokyo-night","volume":60,"last_station_name":"x"}`)
+	if err := os.WriteFile(p, old, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	out := Load()
+	if out.Theme != "tokyo-night" || out.Volume != 60 {
+		t.Errorf("classic fields lost: %+v", out)
+	}
+	if out.Ambient != nil {
+		t.Errorf("Ambient on legacy file: %+v, want nil", out.Ambient)
+	}
+}
+
+func TestLoadStateUnknownAmbientKeyPreserved(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	p, _ := Path()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	future := []byte(`{"ambient":{"rain":10,"cafe":50}}`)
+	if err := os.WriteFile(p, future, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	out := Load()
+	if out.Ambient["rain"] != 10 {
+		t.Errorf("known key dropped: %+v", out.Ambient)
+	}
+	if v, ok := out.Ambient["cafe"]; !ok || v != 50 {
+		t.Errorf("unknown key dropped: %+v", out.Ambient)
+	}
+}
+

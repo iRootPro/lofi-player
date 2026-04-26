@@ -16,6 +16,7 @@ type KeyMap struct {
 	ThemeCycle key.Binding
 	Mini       key.Binding
 	AddStation key.Binding
+	MixerOpen  key.Binding
 	Help       key.Binding
 	Quit       key.Binding
 }
@@ -57,6 +58,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("a"),
 			key.WithHelp("a", "add"),
 		),
+		MixerOpen: key.NewBinding(
+			key.WithKeys("x"),
+			key.WithHelp("x", "mixer"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -71,7 +76,7 @@ func DefaultKeyMap() KeyMap {
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.AddStation},
+		{k.Up, k.Down, k.AddStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
 		{k.ThemeCycle, k.Mini},
 		{k.Help, k.Quit},

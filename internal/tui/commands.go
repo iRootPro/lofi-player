@@ -99,3 +99,18 @@ func pulseTick() tea.Cmd {
 		return pulseTickMsg{}
 	})
 }
+
+// ambientSaveDebounce is how long volume changes are coalesced before a
+// state.Save fires. 500ms is short enough to feel responsive when the
+// user lets go and long enough to absorb a held key (which repeats
+// every ~50ms).
+const ambientSaveDebounce = 500 * time.Millisecond
+
+// ambientSaveTick schedules an ambientSaveTickMsg carrying seq. The
+// Update handler compares seq to Model.ambientSaveSeq to drop stale
+// ticks scheduled by earlier keypresses.
+func ambientSaveTick(seq int) tea.Cmd {
+	return tea.Tick(ambientSaveDebounce, func(time.Time) tea.Msg {
+		return ambientSaveTickMsg{seq: seq}
+	})
+}

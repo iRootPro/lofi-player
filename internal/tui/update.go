@@ -18,10 +18,27 @@ const volumeStep = 5
 // any commands to run. Receiver is by value; never mutate m through a
 // pointer (plan §4.2).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The debounce tick is delivered out-of-band by tea.Tick and must
+	// fire whether or not the user is still inside the mixer modal.
+	if tick, ok := msg.(ambientSaveTickMsg); ok {
+		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
+			if err := m.saveAmbient(m.mixer.Volumes()); err != nil {
+				m.toast = &Toast{
+					Message: fmt.Sprintf("ambient state save failed: %v", err),
+					Kind:    ToastError,
+				}
+				return m, clearToastAfter()
+			}
+		}
+		return m, nil
+	}
 	// Modal states intercept input first so the form can capture text
 	// without the global keymap stealing characters like 'q'.
 	if m.mode == modeAddStation {
 		return m.updateAddStation(msg)
+	}
+	if m.mode == modeMixer {
+		return m.updateMixer(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -130,6 +147,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Tell bubbles/textinput to start its cursor blink.
 		return m, m.addForm.name.Cursor.BlinkCmd()
 
+	case key.Matches(msg, m.keys.MixerOpen):
+		m.modePrev = m.mode
+		m.mode = modeMixer
+		return m, nil
+
 	case key.Matches(msg, m.keys.Help):
 		m.showFullHelp = !m.showFullHelp
 		return m, nil
@@ -196,4 +218,33 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.loading = true
 	m.currentTrack = Track{}
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
+}
+
+// updateMixer routes input while the ambient mixer modal is open.
+// Close keys (esc/x) and global quit are intercepted; everything else
+// is delegated to mixerUI.handle.
+func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "esc", "x":
+		m.mode = m.modePrev
+		nm, cmd := m.scheduleAmbientSave()
+		return nm, cmd
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	m.mixerUI = m.mixerUI.handle(km.String())
+	nm, cmd := m.scheduleAmbientSave()
+	return nm, cmd
+}
+
+// scheduleAmbientSave bumps the debounce sequence and returns a tick
+// that will fire the save callback after ambientSaveDebounce — unless
+// a newer keypress bumps the seq again first.
+func (m Model) scheduleAmbientSave() (Model, tea.Cmd) {
+	m.ambientSaveSeq++
+	return m, ambientSaveTick(m.ambientSaveSeq)
 }

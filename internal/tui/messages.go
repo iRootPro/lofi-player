@@ -34,3 +34,9 @@ type clearToastMsg struct{}
 // pulseTickMsg toggles the live indicator's brightness for a soft
 // "alive" pulse while a station is actively playing.
 type pulseTickMsg struct{}
+
+// ambientSaveTickMsg is the deferred fire from a 500ms debounce window.
+// seq is the snapshot of Model.ambientSaveSeq at schedule time; the
+// handler ignores stale ticks (msg.seq < current seq) so a held key
+// collapses to a single save once the user lets go.
+type ambientSaveTickMsg struct{ seq int }

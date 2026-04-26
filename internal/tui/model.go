@@ -30,6 +30,11 @@ type Options struct {
 	// AutoplayStation is the index in cfg.Stations to start playing on
 	// startup. -1 (or out-of-range) means no autoplay.
 	AutoplayStation int
+	// SaveAmbient is called with a channel-volume snapshot after the
+	// 500ms debounce quiets. Persistence behavior is the caller's
+	// responsibility; a returned error surfaces as an error toast,
+	// matching the AddStation save-failure pattern.
+	SaveAmbient func(map[string]int) error
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -39,6 +44,7 @@ const (
 	modeFull viewMode = iota
 	modeMini
 	modeAddStation
+	modeMixer
 )
 
 // Model is the root Bubble Tea model.
@@ -83,16 +89,26 @@ type Model struct {
 	showFullHelp  bool
 	mode          viewMode
 
-	// modePrev is the layout to restore when a modal (modeAddStation)
-	// closes. modeFull during everyday usage; modeMini if the modal
-	// was opened from compact mode.
+	// modePrev is the layout to restore when a modal (modeAddStation,
+	// modeMixer) closes. modeFull during everyday usage; modeMini if
+	// the modal was opened from compact mode.
 	modePrev viewMode
 	addForm  addStationForm
+
+	mixer   *audio.AmbientMixer
+	mixerUI mixerModel
+
+	// ambientSaveSeq is bumped on every mixer keypress; the matching
+	// ambientSaveTickMsg only fires the save callback when its seq
+	// still equals this value (debounce coalescing).
+	ambientSaveSeq int
+	saveAmbient    func(map[string]int) error
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
-// of the Player — the caller (main) is responsible for Close.
-func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
+// of the Player or AmbientMixer — the caller (main) is responsible for
+// closing them.
+func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixer, opts Options) Model {
 	themeName := cfg.Theme
 	if opts.Theme != "" {
 		themeName = opts.Theme
@@ -134,6 +150,9 @@ func NewModel(cfg *config.Config, player *audio.Player, opts Options) Model {
 		volume:      volume,
 		spinner:     sp,
 		autoplayURL: autoplayURL,
+		mixer:       mixer,
+		mixerUI:     newMixerModel(mixer),
+		saveAmbient: opts.SaveAmbient,
 	}
 }
 
