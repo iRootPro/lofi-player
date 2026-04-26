@@ -1,12 +1,20 @@
 package tui
 
 // logoLines is the static ASCII art for the "lofi" logo rendered
-// next to the now-playing card. All rows are padded to the same
-// display width so the shimmer's column math lines up across rows.
+// next to the now-playing card. The Nerd Font music note from the
+// frame title is mirrored as a prefix on the middle row, so the
+// logo reads as a callback to the brand element in the top border.
+// The "i" uses a middle dot to match the lowercase reading of the
+// app name and to give the rightmost column more presence than a
+// bare vertical bar.
+//
+// All rows must be padded to the same display width so the
+// shimmer's column math lines up across rows; the leading padding
+// on rows 1 and 3 mirrors the iconLogo + space on row 2.
 var logoLines = [...]string{
-	"│     ╭───╮ ╭──── │",
-	"│     │   │ ├──   │",
-	"╰──── ╰───╯ │     │",
+	"   │     ╭───╮ ╭──── ·",
+	iconLogo + "  │     │   │ ├──   │",
+	"   ╰──── ╰───╯ │     │",
 }
 
 // logoShimmerHalo is the radius (in cells) of the lit zone around
