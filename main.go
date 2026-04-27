@@ -20,10 +20,24 @@ import (
 
 const mpvStartupTimeout = 5 * time.Second
 
+// version is overridden at build time via -ldflags "-X main.version=...".
+// Goreleaser injects the tag; `go install` and ad-hoc builds keep "dev".
+var version = "dev"
+
 func main() {
-	var statusline bool
+	var (
+		statusline  bool
+		showVersion bool
+	)
 	flag.BoolVar(&statusline, "statusline", false, "print one status-line snapshot to stdout and exit (no TUI)")
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
+	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand)")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println("lofi-player", version)
+		return
+	}
 
 	if statusline {
 		if err := runStatusline(); err != nil {
@@ -58,6 +72,7 @@ func run() error {
 		Theme:           st.Theme,
 		Volume:          st.Volume,
 		AutoplayStation: stationIndex(cfg.Stations, st.LastStationName),
+		ShowStreamInfo:  st.ShowStreamInfo,
 	}
 	effectiveVolume := cfg.Volume
 	if opts.Volume > 0 {
@@ -101,11 +116,13 @@ func run() error {
 	if m, ok := finalModel.(tui.Model); ok {
 		// Persistence is best-effort — write failure logs to stderr (now
 		// that the alt-screen is restored) and never aborts shutdown.
+		showInfo := m.ShowStreamInfo()
 		next := &state.State{
 			Theme:           m.ThemeName(),
 			Volume:          m.Volume(),
 			LastStationName: m.LastStationName(),
 			Ambient:         mixer.Volumes(),
+			ShowStreamInfo:  &showInfo,
 		}
 		if err := state.Save(next); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: state save failed: %v\n", err)
