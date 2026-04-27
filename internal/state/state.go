@@ -37,6 +37,11 @@ type State struct {
 	// by channel id (e.g. {"rain": 40}). Unknown keys round-trip
 	// untouched so older builds don't drop channels added by newer ones.
 	Ambient map[string]int `json:"ambient,omitempty"`
+	// ShowStreamInfo persists the visibility toggle of the
+	// stream-info row under the now-playing card. Pointer so
+	// omitempty works for an explicit `false` (zero value of bool
+	// would otherwise be indistinguishable from "not set").
+	ShowStreamInfo *bool `json:"show_stream_info,omitempty"`
 }
 
 // Path returns the canonical path to the state file. It honors

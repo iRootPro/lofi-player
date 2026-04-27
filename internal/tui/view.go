@@ -3,9 +3,11 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 )
 
@@ -83,6 +85,8 @@ func (m Model) View() string {
 		content = inner.viewAddStation()
 	case modeMixer:
 		content = inner.viewMixer()
+	case modeConfirmDelete:
+		content = inner.viewConfirmDelete()
 	default:
 		content = inner.viewFull()
 	}
@@ -118,6 +122,41 @@ func (m Model) viewMixer() string {
 	}
 	card := m.mixerUI.view(m.width, m.styles, m.theme)
 	return backdrop + "\n\n" + card
+}
+
+// viewConfirmDelete renders a small "delete <name>?" card centered in
+// the frame, on top of the prior layout so the user keeps visual
+// context for which row is being removed.
+func (m Model) viewConfirmDelete() string {
+	var backdrop string
+	if m.modePrev == modeMini {
+		backdrop = m.viewMini()
+	} else {
+		backdrop = m.viewFull()
+	}
+
+	name := "?"
+	if m.pendingDeleteIdx >= 0 && m.pendingDeleteIdx < len(m.cfg.Stations) {
+		name = m.cfg.Stations[m.pendingDeleteIdx].Name
+	}
+
+	prompt := m.styles.HelpDesc.Render("delete ") +
+		m.styles.StationName.Render(name) +
+		m.styles.HelpDesc.Render("?")
+	hint := m.styles.HelpKey.Render("y") + " " +
+		m.styles.HelpDesc.Render("confirm") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("n / esc") + " " +
+		m.styles.HelpDesc.Render("cancel")
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(0, 2).
+		Render(prompt + "\n\n" + hint)
+
+	centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
+	return backdrop + "\n\n" + centered
 }
 
 // viewAddStation overlays the add-station modal on top of whichever
@@ -211,7 +250,149 @@ func (m Model) renderNowPlaying() string {
 		stationLine += "  " + indicator
 	}
 	trackLine := leftPad + m.formatTrack(innerWidth)
-	return stationLine + "\n" + trackLine
+	out := stationLine + "\n" + trackLine
+	if info := m.renderStreamInfoLine(); info != "" {
+		out += "\n" + info
+	}
+	return out
+}
+
+// bufferBarCells / bufferFullSeconds / bufferLowSeconds shape the
+// network-buffer indicator. 30 s of buffered audio reads as full; the
+// bar drains linearly below that, and crosses into the warning tone
+// when fewer than ~5 s remain so a flaky network shows up loudly.
+const (
+	bufferBarCells    = 5
+	bufferFullSeconds = 30.0
+	bufferLowSeconds  = 5.0
+)
+
+// renderStreamInfoLine composes the technical info row under the
+// now-playing card. Audio-technical bits (bitrate / codec / sample
+// rate / channels) cluster together separated by a single space; the
+// uptime and buffer indicator stand as their own groups separated by
+// `·`. Each segment is dropped when its source value is unknown, so
+// the line degrades gracefully and collapses to nothing when nothing
+// is known yet.
+func (m Model) renderStreamInfoLine() string {
+	if !m.showStreamInfo {
+		return ""
+	}
+	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+		return ""
+	}
+
+	audioParts := []string{}
+	if s := formatBitrateCodec(m.streamInfo, m.styles); s != "" {
+		audioParts = append(audioParts, s)
+	}
+	if s := formatSampleRate(m.streamInfo, m.styles); s != "" {
+		audioParts = append(audioParts, s)
+	}
+
+	groups := []string{}
+	if len(audioParts) > 0 {
+		groups = append(groups, strings.Join(audioParts, "  "))
+	}
+	if s := formatUptime(m.playStartedAt, m.nowTime, m.styles); s != "" {
+		groups = append(groups, s)
+	}
+	if s := renderBufferBar(m.cacheSeconds, m.styles); s != "" {
+		groups = append(groups, s)
+	}
+	if len(groups) == 0 {
+		return ""
+	}
+	sep := "  " + m.styles.HelpSep.Render("·") + "  "
+	return leftPad + strings.Join(groups, sep)
+}
+
+func formatBitrateCodec(si audio.StreamInfoChanged, s Styles) string {
+	var parts []string
+	if si.Bitrate > 0 {
+		parts = append(parts, fmt.Sprintf("%dk", si.Bitrate/1000))
+	}
+	if si.Codec != "" {
+		parts = append(parts, si.Codec)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return s.Hint.Render(strings.Join(parts, " "))
+}
+
+func formatSampleRate(si audio.StreamInfoChanged, s Styles) string {
+	var parts []string
+	if si.SampleRate > 0 {
+		parts = append(parts, fmt.Sprintf("%.1fk", float64(si.SampleRate)/1000))
+	}
+	switch si.Channels {
+	case 0:
+	case 1:
+		parts = append(parts, "mono")
+	case 2:
+		parts = append(parts, "stereo")
+	default:
+		parts = append(parts, fmt.Sprintf("%dch", si.Channels))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return s.Hint.Render(strings.Join(parts, " "))
+}
+
+// formatUptime renders the play-session age as a media-player style
+// timestamp: "0:32", "1:05", "12:34", "1:23:45". Unambiguous as time
+// (no "s"/"m" suffixes that could collide visually with the buffer's
+// seconds value next door).
+func formatUptime(started, now time.Time, s Styles) string {
+	if started.IsZero() {
+		return ""
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	d := now.Sub(started)
+	if d < time.Second {
+		return ""
+	}
+	total := int(d.Seconds())
+	hours := total / 3600
+	mins := (total / 60) % 60
+	secs := total % 60
+	var label string
+	if hours > 0 {
+		label = fmt.Sprintf("%d:%02d:%02d", hours, mins, secs)
+	} else {
+		label = fmt.Sprintf("%d:%02d", mins, secs)
+	}
+	return s.Hint.Render(label)
+}
+
+// renderBufferBar shows demuxer cache health. The fill stays in the
+// muted tone of the rest of the info row in healthy conditions; once
+// the cache drops under bufferLowSeconds the fill switches to the
+// warning hue, which is what makes the bar grab the user's attention
+// only when a hiccup is impending. The "↯" prefix gives the bar
+// context — without it the bar reads as a generic gauge.
+func renderBufferBar(sec float64, s Styles) string {
+	if sec <= 0 {
+		return ""
+	}
+	fill := int(sec * float64(bufferBarCells) / bufferFullSeconds)
+	if fill > bufferBarCells {
+		fill = bufferBarCells
+	}
+	if fill < 0 {
+		fill = 0
+	}
+	fillStyle := s.Hint
+	if sec < bufferLowSeconds {
+		fillStyle = s.BufferLow
+	}
+	return s.Hint.Render("↯ ") +
+		fillStyle.Render(strings.Repeat("▰", fill)) +
+		s.VolEmpty.Render(strings.Repeat("▱", bufferBarCells-fill))
 }
 
 // stationKindIcon returns a small muted "· kind" tag (e.g. "· youtube"
@@ -370,31 +551,46 @@ func (m Model) renderVolume() string {
 	return m.styles.VolLabel.Render(iconVolume) + " " + bar
 }
 
+// stationsViewportHeight caps how many station rows the list shows at
+// once. Above this the list scrolls with the cursor, with `↑/↓ N more`
+// hints so the user can tell something is hidden.
+const stationsViewportHeight = 8
+
 func (m Model) renderStations() string {
-	var b strings.Builder
-	header := iconStations + " stations"
-	if n := len(m.cfg.Stations); n > 0 {
-		header += fmt.Sprintf("  ·  %d", n)
-	}
-	b.WriteString(leftPad + m.styles.SectionHeader.Render(header))
-	b.WriteString("\n")
-
 	if len(m.cfg.Stations) == 0 {
-		// Indent matches the station-name column (leftPad + 4-cell prefix).
-		b.WriteString(leftPad + "    " +
+		return leftPad + "    " +
 			m.styles.StationCursor.Render("press a") + " " +
-			m.styles.Hint.Render("to add one"))
-		b.WriteString("\n")
-		return b.String()
+			m.styles.Hint.Render("to add one")
 	}
 
-	for i, s := range m.cfg.Stations {
-		// Three-cell prefix: cursor bar + space + playing-status dot.
-		// The dot lives in the same column for every row so the station
-		// names line up regardless of which one is playing or selected.
+	n := len(m.cfg.Stations)
+	start, end := 0, n
+	if n > stationsViewportHeight {
+		start = m.cursor - stationsViewportHeight/2
+		if start < 0 {
+			start = 0
+		}
+		if start+stationsViewportHeight > n {
+			start = n - stationsViewportHeight
+		}
+		end = start + stationsViewportHeight
+	}
+
+	var b strings.Builder
+	if start > 0 {
+		b.WriteString(leftPad + "    " +
+			m.styles.Hint.Render(fmt.Sprintf("↑ %d more", start)))
+		b.WriteString("\n")
+	}
+
+	for i := start; i < end; i++ {
+		s := m.cfg.Stations[i]
+		// Three-cell prefix: cursor chevron + space + playing-status dot.
+		// The dot column is consistent so names line up regardless of
+		// which row is selected or playing.
 		cursor := "  "
 		if i == m.cursor {
-			cursor = m.styles.Cursor.Render("▎") + " "
+			cursor = m.styles.Cursor.Render("›") + " "
 		}
 
 		marker := " "
@@ -412,19 +608,37 @@ func (m Model) renderStations() string {
 			name = m.styles.StationItem.Render(s.Name)
 		}
 
-		// Drop the trailing newline on the last row — viewFull adds the
-		// inter-block gap itself, so trailing \n stacks with the gap
-		// and inflates the spacing.
 		line := leftPad + cursor + marker + " " + name
-		if icon := m.stationKindIcon(s); icon != "" {
-			line += "  " + icon
+		if badge := m.stationKindBadge(s); badge != "" {
+			line += "  " + badge
 		}
-		if i < len(m.cfg.Stations)-1 {
+		if i < end-1 || end < n {
 			line += "\n"
 		}
 		b.WriteString(line)
 	}
+
+	if end < n {
+		b.WriteString(leftPad + "    " +
+			m.styles.Hint.Render(fmt.Sprintf("↓ %d more", n-end)))
+	}
+
 	return b.String()
+}
+
+// stationKindBadge returns a small marker for non-default station
+// kinds. Direct streams (the common case) get nothing — the absence
+// reads as default. YouTube gets a play triangle; future kinds fall
+// back to the kind name.
+func (m Model) stationKindBadge(s config.Station) string {
+	kind := s.EffectiveKind()
+	if kind == "" || kind == config.KindStream {
+		return ""
+	}
+	if kind == config.KindYouTube {
+		return m.styles.SectionHeader.Render("▶")
+	}
+	return m.styles.SectionHeader.Render(kind)
 }
 
 // renderTransientFooter returns the optional content that appears
@@ -458,36 +672,59 @@ func (m Model) renderFullHelp() string {
 	groups := m.keys.FullHelp()
 	labels := []string{"navigation", "playback", "app"}
 
-	var inner strings.Builder
+	// Three group columns sit side-by-side instead of stacking
+	// vertically, collapsing the card from ~22 rows to ~6.
+	cols := make([]string, 0, len(groups))
 	for i, g := range groups {
-		if i > 0 {
-			inner.WriteString("\n\n")
-		}
+		var col strings.Builder
 		if i < len(labels) {
-			inner.WriteString(m.styles.HelpGroup.Render(labels[i]))
-			inner.WriteString("\n")
+			col.WriteString(m.styles.HelpGroup.Render(labels[i]))
+			col.WriteString("\n")
 		}
-		for j, binding := range g {
+		first := true
+		for _, binding := range g {
 			h := binding.Help()
 			if h.Key == "" || h.Desc == "" {
 				continue
 			}
-			if j > 0 {
-				inner.WriteString("\n")
+			if !first {
+				col.WriteString("\n")
 			}
-			inner.WriteString("  " +
-				m.styles.HelpKey.Render(fmt.Sprintf("%-7s", h.Key)) +
-				m.styles.HelpDesc.Render(h.Desc))
+			first = false
+			col.WriteString(
+				m.styles.HelpKey.Render(fmt.Sprintf("%-6s", h.Key)) + " " +
+					m.styles.HelpDesc.Render(h.Desc))
 		}
+		cols = append(cols, col.String())
 	}
+
+	gap := "   "
+	row := lipgloss.JoinHorizontal(lipgloss.Top, interleave(cols, gap)...)
 
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Muted).
-		Padding(1, 3).
-		Render(inner.String())
+		Padding(0, 2).
+		Render(row)
 
 	return lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
+}
+
+// interleave returns ss with sep inserted between every pair of
+// elements, so JoinHorizontal can render gap columns without us
+// hand-writing each n-1 spacing.
+func interleave(ss []string, sep string) []string {
+	if len(ss) == 0 {
+		return ss
+	}
+	out := make([]string, 0, len(ss)*2-1)
+	for i, s := range ss {
+		if i > 0 {
+			out = append(out, sep)
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // renderAmbientIndicator returns a compact "· 🌧️🔥" tag composed of

@@ -1,5 +1,7 @@
 package tui
 
+import "time"
+
 // Bridge messages between internal/audio events and the Bubble Tea
 // Update loop. The translator in commands.go maps each audio.Event into
 // the matching XxxMsg here.
@@ -8,6 +10,23 @@ package tui
 type MetadataChangedMsg struct {
 	Title  string
 	Artist string
+}
+
+// StreamInfoChangedMsg carries technical info reported by mpv: bitrate,
+// codec, sample rate, channels. Each field can be zero / "" until mpv
+// resolves it.
+type StreamInfoChangedMsg struct {
+	Bitrate    int
+	Codec      string
+	SampleRate int
+	Channels   int
+}
+
+// CacheStateChangedMsg carries the demuxer's buffered-ahead duration in
+// seconds. Coalesced upstream: only delivered when the value moves past
+// a quarter-second threshold so the event channel stays quiet.
+type CacheStateChangedMsg struct {
+	Seconds float64
 }
 
 // PlaybackStartedMsg fires when mpv unpauses.
@@ -46,3 +65,9 @@ type ambientSaveTickMsg struct{ seq int }
 // advances the logo's internal counter only while playing so the
 // shimmer freezes on pause without breaking the tick chain.
 type logoTickMsg struct{}
+
+// clockTickMsg fires once a second. The model uses it to refresh the
+// "listening 1h 23m" uptime label without re-querying time.Now() at
+// render time. Lives outside the modal dispatch so the chain survives
+// while the user is in the mixer or add-station modal.
+type clockTickMsg struct{ At time.Time }

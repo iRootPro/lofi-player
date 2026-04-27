@@ -35,6 +35,12 @@ type Styles struct {
 	HelpSep   lipgloss.Style
 	HelpGroup lipgloss.Style
 	Hint      lipgloss.Style
+	// BufferLow is the warning tone applied to the buffer-health bar
+	// when the demuxer cache drops below ~5 seconds. The bar otherwise
+	// renders muted; switching to a warning hue is what draws the eye
+	// to a draining buffer without making the line noisy in the
+	// healthy case.
+	BufferLow lipgloss.Style
 	// LogoCrest / LogoMid / LogoBase paint the shimmer that sweeps
 	// across the ASCII logo. Crest is the brightest (the wave
 	// peak), Mid is the soft halo around it, Base is the dim rest
@@ -79,5 +85,6 @@ func NewStyles(t theme.Theme) Styles {
 		LogoCrest:      lipgloss.NewStyle().Foreground(t.Primary),
 		LogoMid:        lipgloss.NewStyle().Foreground(t.Secondary),
 		LogoBase:       muted,
+		BufferLow:      lipgloss.NewStyle().Foreground(t.Warning),
 	}
 }

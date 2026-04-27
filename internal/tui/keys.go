@@ -8,17 +8,20 @@ import "github.com/charmbracelet/bubbles/key"
 // but were dropped when the inline help bar moved into the frame's
 // bottom border.
 type KeyMap struct {
-	Up         key.Binding
-	Down       key.Binding
-	PlayPause  key.Binding
-	VolUp      key.Binding
-	VolDown    key.Binding
-	ThemeCycle key.Binding
-	Mini       key.Binding
-	AddStation key.Binding
-	MixerOpen  key.Binding
-	Help       key.Binding
-	Quit       key.Binding
+	Up            key.Binding
+	Down          key.Binding
+	PlayPause     key.Binding
+	VolUp         key.Binding
+	VolDown       key.Binding
+	ThemeCycle    key.Binding
+	Mini          key.Binding
+	AddStation    key.Binding
+	EditStation   key.Binding
+	DeleteStation key.Binding
+	MixerOpen     key.Binding
+	StreamInfo    key.Binding
+	Help          key.Binding
+	Quit          key.Binding
 }
 
 // DefaultKeyMap returns the Phase 0 keybindings from project plan §6.
@@ -58,9 +61,21 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("a"),
 			key.WithHelp("a", "add"),
 		),
+		EditStation: key.NewBinding(
+			key.WithKeys("e"),
+			key.WithHelp("e", "edit"),
+		),
+		DeleteStation: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "delete"),
+		),
 		MixerOpen: key.NewBinding(
 			key.WithKeys("x"),
 			key.WithHelp("x", "mixer"),
+		),
+		StreamInfo: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "info"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
@@ -76,9 +91,8 @@ func DefaultKeyMap() KeyMap {
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.AddStation, k.MixerOpen},
+		{k.Up, k.Down, k.AddStation, k.EditStation, k.DeleteStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
-		{k.ThemeCycle, k.Mini},
-		{k.Help, k.Quit},
+		{k.ThemeCycle, k.Mini, k.StreamInfo, k.Help, k.Quit},
 	}
 }

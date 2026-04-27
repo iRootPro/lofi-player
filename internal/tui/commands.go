@@ -76,6 +76,15 @@ func waitForEvent(p *audio.Player) tea.Cmd {
 			return PlaybackErrorMsg{Err: e.Err}
 		case audio.EOF:
 			return EOFMsg{}
+		case audio.StreamInfoChanged:
+			return StreamInfoChangedMsg{
+				Bitrate:    e.Bitrate,
+				Codec:      e.Codec,
+				SampleRate: e.SampleRate,
+				Channels:   e.Channels,
+			}
+		case audio.CacheStateChanged:
+			return CacheStateChangedMsg{Seconds: e.Seconds}
 		}
 		return nil
 	}
@@ -124,5 +133,16 @@ const logoInterval = 150 * time.Millisecond
 func logoTick() tea.Cmd {
 	return tea.Tick(logoInterval, func(time.Time) tea.Msg {
 		return logoTickMsg{}
+	})
+}
+
+// clockInterval is the cadence of the once-a-second clock that drives
+// the uptime label.
+const clockInterval = time.Second
+
+// clockTick schedules the next clockTickMsg.
+func clockTick() tea.Cmd {
+	return tea.Tick(clockInterval, func(t time.Time) tea.Msg {
+		return clockTickMsg{At: t}
 	})
 }

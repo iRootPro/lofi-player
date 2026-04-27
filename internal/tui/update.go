@@ -2,12 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
@@ -18,9 +20,11 @@ const volumeStep = 5
 // any commands to run. Receiver is by value; never mutate m through a
 // pointer (plan §4.2).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// The debounce tick is delivered out-of-band by tea.Tick and must
-	// fire whether or not the user is still inside the mixer modal.
-	if tick, ok := msg.(ambientSaveTickMsg); ok {
+	// Out-of-band tea.Tick chains must be handled before the modal
+	// dispatch — the modal updaters only know about tea.KeyMsg and
+	// would silently drop the tick, killing the chain forever.
+	switch tick := msg.(type) {
+	case ambientSaveTickMsg:
 		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
 			if err := m.saveAmbient(m.mixer.Volumes()); err != nil {
 				m.toast = &Toast{
@@ -31,6 +35,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case pulseTickMsg:
+		m.pulseDim = !m.pulseDim
+		return m, pulseTick()
+	case logoTickMsg:
+		if m.playing {
+			m.logo.advance()
+		}
+		return m, logoTick()
+	case clockTickMsg:
+		m.nowTime = tick.At
+		return m, clockTick()
 	}
 	// Modal states intercept input first so the form can capture text
 	// without the global keymap stealing characters like 'q'.
@@ -39,6 +54,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeMixer {
 		return m.updateMixer(msg)
+	}
+	if m.mode == modeConfirmDelete {
+		return m.updateConfirmDelete(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -57,6 +75,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PlaybackStartedMsg:
 		m.playing = true
 		m.loading = false
+		// First start after a fresh Play call: anchor the uptime
+		// counter. Resume after pause keeps the previous anchor so
+		// "listening 1h 23m" doesn't reset every time the user toggles.
+		if m.playStartedAt.IsZero() {
+			m.playStartedAt = time.Now()
+		}
 		return m, waitForEvent(m.player)
 
 	case PlaybackPausedMsg:
@@ -70,6 +94,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.playingIdx = -1
 		m.currentTrack = Track{}
+		m.streamInfo = audio.StreamInfoChanged{}
+		m.cacheSeconds = 0
+		m.playStartedAt = time.Time{}
 		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
 	case EOFMsg:
@@ -77,6 +104,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.playingIdx = -1
 		m.currentTrack = Track{}
+		m.streamInfo = audio.StreamInfoChanged{}
+		m.cacheSeconds = 0
+		m.playStartedAt = time.Time{}
+		return m, waitForEvent(m.player)
+
+	case StreamInfoChangedMsg:
+		m.streamInfo = audio.StreamInfoChanged{
+			Bitrate:    msg.Bitrate,
+			Codec:      msg.Codec,
+			SampleRate: msg.SampleRate,
+			Channels:   msg.Channels,
+		}
+		return m, waitForEvent(m.player)
+
+	case CacheStateChangedMsg:
+		m.cacheSeconds = msg.Seconds
 		return m, waitForEvent(m.player)
 
 	case clearToastMsg:
@@ -156,9 +199,31 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Tell bubbles/textinput to start its cursor blink.
 		return m, m.addForm.name.Cursor.BlinkCmd()
 
+	case key.Matches(msg, m.keys.EditStation):
+		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
+			return m, nil
+		}
+		m.modePrev = m.mode
+		m.mode = modeAddStation
+		m.addForm = newEditStationForm(m.cursor, m.cfg.Stations[m.cursor])
+		return m, m.addForm.name.Cursor.BlinkCmd()
+
+	case key.Matches(msg, m.keys.DeleteStation):
+		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
+			return m, nil
+		}
+		m.modePrev = m.mode
+		m.mode = modeConfirmDelete
+		m.pendingDeleteIdx = m.cursor
+		return m, nil
+
 	case key.Matches(msg, m.keys.MixerOpen):
 		m.modePrev = m.mode
 		m.mode = modeMixer
+		return m, nil
+
+	case key.Matches(msg, m.keys.StreamInfo):
+		m.showStreamInfo = !m.showStreamInfo
 		return m, nil
 
 	case key.Matches(msg, m.keys.Help):
@@ -168,9 +233,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateAddStation routes input to the add-station modal form. On
-// submission the new station is appended to cfg.Stations and the
-// config file is rewritten; on cancellation no state changes.
+// updateAddStation routes input to the add/edit station modal form.
+// The form is shared between both flows; result.EditIdx >= 0 means
+// the user was editing an existing entry (in-place update), -1 means
+// appending a brand-new one.
 func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 	form, result, stillOpen, cmd := m.addForm.update(msg)
 	m.addForm = form
@@ -184,23 +250,110 @@ func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Append, persist, point cursor at new station.
-	m.cfg.Stations = append(m.cfg.Stations, result.Station)
-	m.cursor = len(m.cfg.Stations) - 1
+	editing := result.EditIdx >= 0 && result.EditIdx < len(m.cfg.Stations)
+	var verb string
+	if editing {
+		m.cfg.Stations[result.EditIdx] = result.Station
+		m.cursor = result.EditIdx
+		verb = "updated"
+	} else {
+		m.cfg.Stations = append(m.cfg.Stations, result.Station)
+		m.cursor = len(m.cfg.Stations) - 1
+		verb = "added"
+	}
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: fmt.Sprintf("station added in memory but config save failed: %v", err),
+			Message: fmt.Sprintf("station %s in memory but config save failed: %v", verb, err),
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
 	}
 
 	m.toast = &Toast{
-		Message: "added: " + result.Station.Name,
+		Message: verb + ": " + result.Station.Name,
 		Kind:    ToastSuccess,
 	}
 	return m, clearToastAfter()
+}
+
+// updateConfirmDelete handles the delete-confirmation modal. y/Y/enter
+// commits, n/N/esc cancels. Anything else is ignored so the user can't
+// accidentally dismiss it by stray keys.
+func (m Model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "y", "Y", "enter":
+		return m.commitDelete()
+	case "n", "N", "esc":
+		m.mode = m.modePrev
+		m.pendingDeleteIdx = -1
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// commitDelete removes the pending station from cfg.Stations,
+// rewrites the config, and adjusts cursor / playingIdx so the model
+// stays consistent (deleting the currently-playing station pauses
+// playback and clears the now-playing card).
+func (m Model) commitDelete() (tea.Model, tea.Cmd) {
+	idx := m.pendingDeleteIdx
+	m.mode = m.modePrev
+	m.pendingDeleteIdx = -1
+	if idx < 0 || idx >= len(m.cfg.Stations) {
+		return m, nil
+	}
+	deleted := m.cfg.Stations[idx]
+
+	m.cfg.Stations = append(m.cfg.Stations[:idx], m.cfg.Stations[idx+1:]...)
+
+	// Cursor stays at the same index unless that pushes it past the
+	// new end of the list.
+	if m.cursor >= len(m.cfg.Stations) {
+		m.cursor = len(m.cfg.Stations) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+
+	// Adjust playingIdx for the shift, and pause playback if the
+	// deleted entry was the one currently playing.
+	var cmd tea.Cmd
+	switch {
+	case m.playingIdx == idx:
+		m.playingIdx = -1
+		m.playing = false
+		m.loading = false
+		m.currentTrack = Track{}
+		m.streamInfo = audio.StreamInfoChanged{}
+		m.cacheSeconds = 0
+		m.playStartedAt = time.Time{}
+		if m.player != nil {
+			cmd = pauseCmd(m.player)
+		}
+	case m.playingIdx > idx:
+		m.playingIdx--
+	}
+
+	if err := config.Save(m.cfg); err != nil {
+		m.toast = &Toast{
+			Message: fmt.Sprintf("removed in memory but config save failed: %v", err),
+			Kind:    ToastError,
+		}
+		return m, tea.Batch(clearToastAfter(), cmd)
+	}
+
+	m.toast = &Toast{
+		Message: "deleted: " + deleted.Name,
+		Kind:    ToastSuccess,
+	}
+	return m, tea.Batch(clearToastAfter(), cmd)
 }
 
 // togglePlayPause is the meat of the space binding. State update is
@@ -226,6 +379,9 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.playing = true
 	m.loading = true
 	m.currentTrack = Track{}
+	m.streamInfo = audio.StreamInfoChanged{}
+	m.cacheSeconds = 0
+	m.playStartedAt = time.Time{}
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
 }
 

@@ -94,19 +94,17 @@ func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
 		return ""
 	}
 	var inner strings.Builder
-	inner.WriteString(styles.SectionHeader.Render("─── ambient mixer ───"))
-	inner.WriteString("\n\n")
+	inner.WriteString(styles.SectionHeader.Render("ambient mixer"))
+	inner.WriteString("\n")
 
 	ids := m.mixer.ChannelIDs()
-	for i, id := range ids {
+	for _, id := range ids {
 		ch, _ := m.mixer.Channel(id)
 		v := m.mixer.Volume(id)
 		disabled := m.mixer.Disabled(id)
-		selected := i == m.selected
+		selected := ids[m.selected] == id
+		inner.WriteString("\n")
 		inner.WriteString(m.renderRow(ch, v, disabled, selected, styles))
-		if i < len(ids)-1 {
-			inner.WriteString("\n\n")
-		}
 	}
 	inner.WriteString("\n\n")
 	inner.WriteString(m.renderHint(styles))
@@ -114,7 +112,7 @@ func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.Muted).
-		Padding(1, 3).
+		Padding(0, 2).
 		Render(inner.String())
 
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, card)
@@ -123,7 +121,7 @@ func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
 func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected bool, styles Styles) string {
 	cursor := "  "
 	if selected {
-		cursor = styles.Cursor.Render("> ")
+		cursor = styles.Cursor.Render("›") + " "
 	}
 	label := fmt.Sprintf("%-12s", ch.Label)
 	// Icon picks up the brand Primary tone like the logo / volume / stations

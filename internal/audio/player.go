@@ -18,11 +18,15 @@ import (
 // internal — mpv echoes them back on each property-change event so the
 // translator can route by id without parsing names.
 const (
-	propIDPause      = 1
-	propIDVolume     = 2
-	propIDMetadata   = 3
-	propIDMediaTitle = 4
-	propIDIdleActive = 5
+	propIDPause       = 1
+	propIDVolume      = 2
+	propIDMetadata    = 3
+	propIDMediaTitle  = 4
+	propIDIdleActive  = 5
+	propIDAudioBitr   = 6
+	propIDAudioCodec  = 7
+	propIDAudioParams = 8
+	propIDCacheState  = 9
 )
 
 // Event is the sealed interface implemented by every value emitted on
@@ -55,11 +59,32 @@ type PlaybackError struct {
 // streams normally don't reach EOF except on graceful server shutdown.
 type EOF struct{}
 
-func (MetadataChanged) isEvent() {}
-func (PlaybackStarted) isEvent() {}
-func (PlaybackPaused) isEvent() {}
-func (PlaybackError) isEvent()  {}
-func (EOF) isEvent()            {}
+// StreamInfoChanged carries technical info about the active stream as
+// reported by mpv (bitrate, codec, sample rate, channels). Each field
+// is the latest known value; zero / "" means "not yet reported by
+// mpv". The event fires whenever any field changes; the UI renders
+// whichever fields are non-zero.
+type StreamInfoChanged struct {
+	Bitrate    int    // bits per second; 0 if unknown
+	Codec      string // short name, e.g. "mp3", "opus"; "" if unknown
+	SampleRate int    // Hz; 0 if unknown
+	Channels   int    // 1, 2, …; 0 if unknown
+}
+
+// CacheStateChanged reports how many seconds of audio mpv has buffered
+// ahead of the playback head. A draining value (or zero while playing)
+// signals the network is failing.
+type CacheStateChanged struct {
+	Seconds float64
+}
+
+func (MetadataChanged) isEvent()   {}
+func (PlaybackStarted) isEvent()   {}
+func (PlaybackPaused) isEvent()    {}
+func (PlaybackError) isEvent()     {}
+func (EOF) isEvent()               {}
+func (StreamInfoChanged) isEvent() {}
+func (CacheStateChanged) isEvent() {}
 
 // Options controls Player startup.
 type Options struct {
@@ -88,6 +113,14 @@ type Player struct {
 	mu         sync.Mutex
 	lastTitle  string
 	lastArtist string
+	// streamInfo accumulates the most recent property values across
+	// observe channels so a partial update (e.g. only audio-codec-name
+	// resolved) still ships the previously-known fields.
+	streamInfo StreamInfoChanged
+	// lastCacheSec coalesces cache-state ticks: mpv emits these many
+	// times per second; we only forward when the value moves past a
+	// quarter-second threshold to keep the event channel quiet.
+	lastCacheSec float64
 }
 
 // NewPlayer spawns mpv in idle mode and establishes a JSON-IPC connection
@@ -176,6 +209,10 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 		{propIDMetadata, "metadata"},
 		{propIDMediaTitle, "media-title"},
 		{propIDIdleActive, "idle-active"},
+		{propIDAudioBitr, "audio-bitrate"},
+		{propIDAudioCodec, "audio-codec-name"},
+		{propIDAudioParams, "audio-params"},
+		{propIDCacheState, "demuxer-cache-state"},
 	}
 	for _, prop := range properties {
 		if err := ipc.observe(ctx, prop.id, prop.name); err != nil {
@@ -203,6 +240,8 @@ func (p *Player) Play(url string) error {
 	p.mu.Lock()
 	p.lastTitle = ""
 	p.lastArtist = ""
+	p.streamInfo = StreamInfoChanged{}
+	p.lastCacheSec = 0
 	p.mu.Unlock()
 
 	if _, err := p.ipc.command(ctx, "loadfile", url, "replace"); err != nil {
@@ -342,8 +381,89 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 				return MetadataChanged{Title: title}
 			}
 		}
+	case "audio-bitrate":
+		var bitrate float64
+		if err := json.Unmarshal(raw.Data, &bitrate); err != nil {
+			return nil
+		}
+		return p.updateStreamInfo(func(si *StreamInfoChanged) bool {
+			next := int(bitrate)
+			if next == si.Bitrate {
+				return false
+			}
+			si.Bitrate = next
+			return true
+		})
+	case "audio-codec-name":
+		var codec string
+		if err := json.Unmarshal(raw.Data, &codec); err != nil {
+			return nil
+		}
+		return p.updateStreamInfo(func(si *StreamInfoChanged) bool {
+			if codec == si.Codec {
+				return false
+			}
+			si.Codec = codec
+			return true
+		})
+	case "audio-params":
+		var params struct {
+			SampleRate int `json:"samplerate"`
+			Channels   int `json:"channel-count"`
+		}
+		if err := json.Unmarshal(raw.Data, &params); err != nil {
+			return nil
+		}
+		return p.updateStreamInfo(func(si *StreamInfoChanged) bool {
+			changed := false
+			if params.SampleRate != 0 && params.SampleRate != si.SampleRate {
+				si.SampleRate = params.SampleRate
+				changed = true
+			}
+			if params.Channels != 0 && params.Channels != si.Channels {
+				si.Channels = params.Channels
+				changed = true
+			}
+			return changed
+		})
+	case "demuxer-cache-state":
+		var state struct {
+			CacheDuration float64 `json:"cache-duration"`
+		}
+		if err := json.Unmarshal(raw.Data, &state); err != nil {
+			return nil
+		}
+		// Coalesce: only forward when the value moves past a quarter
+		// second so we don't flood the event channel.
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if absDelta(state.CacheDuration, p.lastCacheSec) < 0.25 {
+			return nil
+		}
+		p.lastCacheSec = state.CacheDuration
+		return CacheStateChanged{Seconds: state.CacheDuration}
 	}
 	return nil
+}
+
+// updateStreamInfo applies mutate to the cached StreamInfoChanged
+// snapshot and returns the snapshot if anything actually changed.
+// Returns nil otherwise so the translator drops the event.
+func (p *Player) updateStreamInfo(mutate func(*StreamInfoChanged) bool) Event {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !mutate(&p.streamInfo) {
+		return nil
+	}
+	return p.streamInfo
+}
+
+func absDelta(a, b float64) float64 {
+	d := a - b
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 // looksLikeURLFragment returns true for strings that look like raw

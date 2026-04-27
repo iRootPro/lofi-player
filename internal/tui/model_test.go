@@ -62,8 +62,10 @@ func TestView_RendersWhenSized(t *testing.T) {
 	if !strings.Contains(out, "lofi.player") {
 		t.Errorf("View output missing app title; got:\n%s", out)
 	}
-	if !strings.Contains(out, "stations") {
-		t.Errorf("View output missing stations section header")
+	for _, name := range []string{"A", "B", "C"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("View output missing station %q in list", name)
+		}
 	}
 }
 

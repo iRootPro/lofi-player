@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -35,6 +37,11 @@ type Options struct {
 	// responsibility; a returned error surfaces as an error toast,
 	// matching the AddStation save-failure pattern.
 	SaveAmbient func(map[string]int) error
+	// ShowStreamInfo overrides the default visibility of the
+	// stream-info row under the now-playing card. nil = use default
+	// (true). Pointer rather than bool so the caller can express
+	// "user has explicitly hidden it" distinctly from "unset".
+	ShowStreamInfo *bool
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -45,6 +52,7 @@ const (
 	modeMini
 	modeAddStation
 	modeMixer
+	modeConfirmDelete
 )
 
 // Model is the root Bubble Tea model.
@@ -95,10 +103,14 @@ type Model struct {
 	mode          viewMode
 
 	// modePrev is the layout to restore when a modal (modeAddStation,
-	// modeMixer) closes. modeFull during everyday usage; modeMini if
-	// the modal was opened from compact mode.
+	// modeMixer, modeConfirmDelete) closes. modeFull during everyday
+	// usage; modeMini if the modal was opened from compact mode.
 	modePrev viewMode
 	addForm  addStationForm
+
+	// pendingDeleteIdx points at the station awaiting user confirmation
+	// in modeConfirmDelete. -1 outside that mode.
+	pendingDeleteIdx int
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel
@@ -108,6 +120,27 @@ type Model struct {
 	// still equals this value (debounce coalescing).
 	ambientSaveSeq int
 	saveAmbient    func(map[string]int) error
+
+	// streamInfo is the latest technical info reported by mpv for the
+	// current station (bitrate, codec, sample rate, channels). All
+	// fields zero when nothing is playing or before mpv reports.
+	streamInfo audio.StreamInfoChanged
+	// cacheSeconds is how much audio mpv has buffered ahead. Drives
+	// the buffer-health indicator under the now-playing card.
+	cacheSeconds float64
+	// playStartedAt is when the current session started (i.e. last
+	// successful Play call). Drives the "listening 1h 23m" uptime
+	// label. Zero when nothing is playing.
+	playStartedAt time.Time
+	// nowTime is the wall clock as of the last clockTickMsg, used to
+	// derive uptime from playStartedAt without re-rendering once a
+	// second pulling time.Now() at render time.
+	nowTime time.Time
+
+	// showStreamInfo toggles visibility of the technical info row
+	// (bitrate / codec / sample / uptime / buffer-bar). Default true;
+	// the user toggles with `i` and the choice persists via state.
+	showStreamInfo bool
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
@@ -142,22 +175,29 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(t.Muted)
 
+	showStreamInfo := true
+	if opts.ShowStreamInfo != nil {
+		showStreamInfo = *opts.ShowStreamInfo
+	}
+
 	return Model{
-		cfg:         cfg,
-		player:      player,
-		theme:       t,
-		styles:      NewStyles(t),
-		keys:        DefaultKeyMap(),
-		cursor:      cursor,
-		playingIdx:  playingIdx,
-		playing:     playing,
-		loading:     loading,
-		volume:      volume,
-		spinner:     sp,
-		autoplayURL: autoplayURL,
-		mixer:       mixer,
-		mixerUI:     newMixerModel(mixer),
-		saveAmbient: opts.SaveAmbient,
+		cfg:            cfg,
+		player:         player,
+		theme:          t,
+		styles:         NewStyles(t),
+		keys:           DefaultKeyMap(),
+		cursor:         cursor,
+		playingIdx:     playingIdx,
+		playing:        playing,
+		loading:        loading,
+		volume:         volume,
+		spinner:        sp,
+		autoplayURL:    autoplayURL,
+		mixer:            mixer,
+		mixerUI:          newMixerModel(mixer),
+		saveAmbient:      opts.SaveAmbient,
+		showStreamInfo:   showStreamInfo,
+		pendingDeleteIdx: -1,
 	}
 }
 
@@ -166,7 +206,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 // indicator pulse tick loops. If the model was constructed with an
 // AutoplayStation, the corresponding playCmd is also dispatched.
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick()}
+	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick(), clockTick()}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
 	}
@@ -189,6 +229,11 @@ func (m Model) LastStationName() string {
 	}
 	return m.cfg.Stations[m.playingIdx].Name
 }
+
+// ShowStreamInfo returns whether the stream-info row is currently
+// visible — used by main on shutdown to persist the toggle across
+// sessions.
+func (m Model) ShowStreamInfo() bool { return m.showStreamInfo }
 
 func clampVolume(v int) int {
 	switch {
