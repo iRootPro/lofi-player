@@ -55,6 +55,22 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 
 ## Install
 
+### Homebrew (macOS, Linux)
+
+```sh
+brew install iRootPro/tap/lofi-player
+```
+
+### One-line installer (macOS, Linux)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/install.sh | sh
+```
+
+Drops the binary into `~/.local/bin` by default. Override with
+`INSTALL_DIR=/usr/local/bin` or pin to a specific tag with
+`VERSION=v0.1.0`.
+
 ### From source (Go 1.26+)
 
 ```sh
@@ -250,9 +266,11 @@ go test  ./...
 go vet   ./...
 ```
 
-The Makefile-free workflow on purpose. Releases are produced by
-`goreleaser` from `.goreleaser.yaml`; the GitHub Actions workflow
-in `.github/workflows/release.yml` runs it on every `v*` tag.
+The Makefile-free workflow on purpose. Releases are cut locally:
+`git tag -a vX.Y.Z -m "..."` then `goreleaser release --clean` —
+goreleaser uploads the binaries to GitHub Releases and pushes the
+updated formula to [iRootPro/homebrew-tap](https://github.com/iRootPro/homebrew-tap)
+in one shot. CI on `main` runs `vet` + `test` + `build` on every push.
 
 ## Credits
 

@@ -52,3 +52,24 @@ release:
   draft: false
   prerelease: auto
   name_template: "v{{ .Version }}"
+
+brews:
+  - name: lofi-player
+    homepage: https://github.com/iRootPro/lofi-player
+    description: Keyboard-driven TUI for lofi, chillhop and ambient internet radio
+    license: MIT
+    repository:
+      owner: iRootPro
+      name: homebrew-tap
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "brew: lofi-player {{ .Tag }}"
+    dependencies:
+      - name: mpv
+      - name: yt-dlp
+        type: optional
+    install: |
+      bin.install "lofi-player"
+    test: |
+      system "#{bin}/lofi-player", "--version"
