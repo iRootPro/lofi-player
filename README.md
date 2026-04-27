@@ -55,11 +55,17 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 
 ## Install
 
-### Homebrew (macOS, Linux)
+Supported platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`,
+`darwin/arm64`. Windows is not supported.
+
+### Homebrew (macOS, Linux) — recommended
 
 ```sh
 brew install iRootPro/tap/lofi-player
 ```
+
+The formula pulls in `mpv` automatically and recommends `yt-dlp` for
+YouTube playback — one command and you're done.
 
 ### One-line installer (macOS, Linux)
 
@@ -67,9 +73,13 @@ brew install iRootPro/tap/lofi-player
 curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/install.sh | sh
 ```
 
-Drops the binary into `~/.local/bin` by default. Override with
-`INSTALL_DIR=/usr/local/bin` or pin to a specific tag with
-`VERSION=v0.1.0`.
+Auto-detects OS/arch, pulls the matching tarball from the latest
+release, drops the binary into `~/.local/bin`. Override with
+`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.1.1`.
+
+You'll also need `mpv` (and optionally `yt-dlp`) — see
+[runtime dependencies](#runtime-dependencies) below. The installer
+prints a hint if `mpv` isn't on `$PATH`.
 
 ### From source (Go 1.26+)
 
@@ -83,14 +93,14 @@ Grab the archive for your OS/arch from the
 [releases page](https://github.com/iRootPro/lofi-player/releases),
 extract, drop `lofi-player` somewhere on `$PATH`.
 
-Supported platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`,
-`darwin/arm64`. Windows is not supported.
-
 ### Runtime dependencies
+
+Homebrew handles these for you. The other install paths require you
+to install them separately.
 
 | dependency | required for | install |
 |---|---|---|
-| `mpv` | all playback | `brew install mpv` · `apt install mpv` · `pacman -S mpv` |
+| `mpv` | all playback | `brew install mpv` · `apt install mpv` · `pacman -S mpv` · `dnf install mpv` |
 | `yt-dlp` | YouTube stations only | `brew install yt-dlp` · `pip install yt-dlp` |
 | Nerd Font | section/volume/mixer icons | [JetBrains Mono](https://github.com/ryanoasis/nerd-fonts/releases) or [FiraCode](https://github.com/ryanoasis/nerd-fonts/releases) Nerd Font |
 
