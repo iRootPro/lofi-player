@@ -1,5 +1,7 @@
 # lofi-player
 
+**English** · [Русский](README.ru.md)
+
 A keyboard-driven TUI for lofi, chillhop and ambient internet radio —
 built to live in a tmux pane while you work.
 
@@ -46,6 +48,10 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 - **Stream info row** — bitrate, codec, sample rate, session uptime,
   and a buffer-health bar live under the now-playing card. Toggle
   visibility with `i`; the choice persists across sessions.
+- **Friendly first run** — missing `mpv` shows a styled install hint
+  instead of a raw error; missing `yt-dlp` degrades to a startup
+  warning and an `unavailable` tag on YouTube stations, so the rest
+  of your library keeps playing.
 
 ## Install
 
@@ -72,10 +78,13 @@ Supported platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`,
 | `yt-dlp` | YouTube stations only | `brew install yt-dlp` · `pip install yt-dlp` |
 | Nerd Font | section/volume/mixer icons | [JetBrains Mono](https://github.com/ryanoasis/nerd-fonts/releases) or [FiraCode](https://github.com/ryanoasis/nerd-fonts/releases) Nerd Font |
 
-The app refuses to start if `mpv` is missing, and refuses if your
-config has YouTube stations but `yt-dlp` is missing — both with a clear
-install hint. Without a Nerd Font, the icons render as tofu boxes; the
-rest of the UI keeps working.
+If `mpv` isn't on `$PATH`, the app prints a styled "can't start" card
+with platform-specific install commands and exits — there's nothing
+to play without the engine. If `yt-dlp` is missing but your config
+has YouTube stations, the app starts normally with a warning toast,
+marks YouTube rows as `unavailable`, and refuses to autoplay them;
+direct streams keep working. Without a Nerd Font, the icons render
+as tofu boxes; the rest of the UI keeps working.
 
 ## Quick start
 
