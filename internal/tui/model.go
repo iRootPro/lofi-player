@@ -42,6 +42,15 @@ type Options struct {
 	// (true). Pointer rather than bool so the caller can express
 	// "user has explicitly hidden it" distinctly from "unset".
 	ShowStreamInfo *bool
+	// StartupWarning, when non-empty, is surfaced as a dismissible
+	// toast on the first render. Used today for the "yt-dlp missing"
+	// soft warning so the user sees it without the app refusing to
+	// start.
+	StartupWarning string
+	// YouTubeReady is false when yt-dlp isn't on $PATH. The list
+	// renders YouTube stations as `unavailable` and togglePlayPause
+	// surfaces a toast instead of attempting playback.
+	YouTubeReady bool
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -141,6 +150,15 @@ type Model struct {
 	// (bitrate / codec / sample / uptime / buffer-bar). Default true;
 	// the user toggles with `i` and the choice persists via state.
 	showStreamInfo bool
+
+	// youtubeReady is false when yt-dlp is missing on the host. Drives
+	// the `unavailable` badge in the station list and the toast that
+	// togglePlayPause surfaces in place of attempting playback.
+	youtubeReady bool
+	// startupWarning is the message Init pushes as the first toast.
+	// Cleared after the first render so it doesn't fire again on
+	// model rebuild.
+	startupWarning string
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
@@ -164,11 +182,17 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	loading := false
 	autoplayURL := ""
 	if opts.AutoplayStation >= 0 && opts.AutoplayStation < len(cfg.Stations) {
-		cursor = opts.AutoplayStation
-		playingIdx = opts.AutoplayStation
-		playing = true
-		loading = true
-		autoplayURL = cfg.Stations[opts.AutoplayStation].URL
+		// Skip autoplay for YouTube stations when yt-dlp is missing —
+		// otherwise the user lands on a station that immediately
+		// errors out, which competes with the startup warning toast.
+		s := cfg.Stations[opts.AutoplayStation]
+		if !s.IsYouTube() || opts.YouTubeReady {
+			cursor = opts.AutoplayStation
+			playingIdx = opts.AutoplayStation
+			playing = true
+			loading = true
+			autoplayURL = s.URL
+		}
 	}
 
 	sp := spinner.New()
@@ -178,6 +202,11 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	showStreamInfo := true
 	if opts.ShowStreamInfo != nil {
 		showStreamInfo = *opts.ShowStreamInfo
+	}
+
+	var startupToast *Toast
+	if opts.StartupWarning != "" {
+		startupToast = &Toast{Message: opts.StartupWarning, Kind: ToastError}
 	}
 
 	return Model{
@@ -198,6 +227,9 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		saveAmbient:      opts.SaveAmbient,
 		showStreamInfo:   showStreamInfo,
 		pendingDeleteIdx: -1,
+		youtubeReady:     opts.YouTubeReady,
+		startupWarning:   opts.StartupWarning,
+		toast:            startupToast,
 	}
 }
 
@@ -209,6 +241,12 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick(), clockTick()}
 	if m.autoplayURL != "" {
 		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
+	}
+	if m.startupWarning != "" {
+		// Auto-clear the startup toast on the same schedule as the
+		// in-app toasts; the user can also dismiss it implicitly by
+		// triggering any other toast (which replaces it).
+		cmds = append(cmds, clearToastAfter())
 	}
 	return tea.Batch(cmds...)
 }

@@ -60,12 +60,16 @@ func run() error {
 	}
 
 	if _, err := exec.LookPath("mpv"); err != nil {
-		return fmt.Errorf("mpv not found on $PATH; install with `brew install mpv` (macOS) or `apt install mpv` (Debian/Ubuntu)")
+		fmt.Fprint(os.Stderr, "\n", tui.RenderMissingDependency(
+			"mpv", "audio engine, required for all playback",
+			[]tui.InstallCmd{
+				{Platform: "macOS", Cmd: "brew install mpv"},
+				{Platform: "Linux", Cmd: "apt install mpv  ·  pacman -S mpv  ·  dnf install mpv"},
+			}), "\n")
+		os.Exit(1)
 	}
 
-	if err := preflightYouTube(cfg.Stations); err != nil {
-		return err
-	}
+	youtubeWarning := preflightYouTube(cfg.Stations)
 
 	st := state.Load()
 	opts := tui.Options{
@@ -73,6 +77,8 @@ func run() error {
 		Volume:          st.Volume,
 		AutoplayStation: stationIndex(cfg.Stations, st.LastStationName),
 		ShowStreamInfo:  st.ShowStreamInfo,
+		StartupWarning:  youtubeWarning,
+		YouTubeReady:    youtubeWarning == "",
 	}
 	effectiveVolume := cfg.Volume
 	if opts.Volume > 0 {
@@ -154,25 +160,28 @@ func runStatusline() error {
 	return nil
 }
 
-// preflightYouTube verifies yt-dlp is on $PATH whenever the config
-// contains at least one YouTube-kind station. Hard-fails with a clear
-// install hint so the user isn't left guessing why YouTube playback
-// produces a generic "stream load failed" toast at runtime.
-func preflightYouTube(stations []config.Station) error {
-	var youtubeNames []string
+// preflightYouTube checks whether yt-dlp is on $PATH when the config
+// contains YouTube stations. Returns the empty string when YouTube is
+// either unused or fully wired; otherwise returns a one-line warning
+// suitable for an in-app startup toast. The TUI then renders YouTube
+// stations as unavailable and refuses to play them, but the rest of
+// the app keeps working — losing one source kind shouldn't sink the
+// whole player.
+func preflightYouTube(stations []config.Station) string {
+	hasYouTube := false
 	for _, s := range stations {
 		if s.IsYouTube() {
-			youtubeNames = append(youtubeNames, s.Name)
+			hasYouTube = true
+			break
 		}
 	}
-	if len(youtubeNames) == 0 {
-		return nil
+	if !hasYouTube {
+		return ""
 	}
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		return fmt.Errorf("yt-dlp not found on $PATH but config has %d YouTube station(s) (%v); install with `brew install yt-dlp` (macOS) or `pip install yt-dlp`",
-			len(youtubeNames), youtubeNames)
+		return "yt-dlp not found — YouTube stations unavailable. install: brew install yt-dlp / pip install yt-dlp"
 	}
-	return nil
+	return ""
 }
 
 // stationIndex returns the index in stations matching name, or -1 if

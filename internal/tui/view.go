@@ -257,14 +257,19 @@ func (m Model) renderNowPlaying() string {
 	return out
 }
 
-// bufferBarCells / bufferFullSeconds / bufferLowSeconds shape the
-// network-buffer indicator. 30 s of buffered audio reads as full; the
-// bar drains linearly below that, and crosses into the warning tone
-// when fewer than ~5 s remain so a flaky network shows up loudly.
+// bufferBarCells / bufferFullSeconds / bufferLowSeconds /
+// bufferShowSeconds shape the network-buffer indicator. 30 s of
+// buffered audio reads as full; the bar drains linearly below that
+// and crosses into the warning tone when fewer than ~5 s remain so a
+// flaky network shows up loudly. Below ~1 s the bar disappears
+// entirely — direct Icecast/HTTP streams play near-synchronously and
+// hold almost no read-ahead, so an always-visible empty bar there
+// reads as broken when it isn't.
 const (
 	bufferBarCells    = 5
 	bufferFullSeconds = 30.0
 	bufferLowSeconds  = 5.0
+	bufferShowSeconds = 1.0
 )
 
 // renderStreamInfoLine composes the technical info row under the
@@ -376,7 +381,7 @@ func formatUptime(started, now time.Time, s Styles) string {
 // only when a hiccup is impending. The "↯" prefix gives the bar
 // context — without it the bar reads as a generic gauge.
 func renderBufferBar(sec float64, s Styles) string {
-	if sec <= 0 {
+	if sec < bufferShowSeconds {
 		return ""
 	}
 	fill := int(sec * float64(bufferBarCells) / bufferFullSeconds)
@@ -598,8 +603,12 @@ func (m Model) renderStations() string {
 			marker = m.statusBlock()
 		}
 
+		unavailable := s.IsYouTube() && !m.youtubeReady
+
 		var name string
 		switch {
+		case unavailable:
+			name = m.styles.Hint.Render(s.Name)
 		case i == m.cursor:
 			name = m.styles.Cursor.Render(s.Name)
 		case i == m.playingIdx:
@@ -611,6 +620,9 @@ func (m Model) renderStations() string {
 		line := leftPad + cursor + marker + " " + name
 		if badge := m.stationKindBadge(s); badge != "" {
 			line += "  " + badge
+		}
+		if unavailable {
+			line += "  " + m.styles.Hint.Render("unavailable")
 		}
 		if i < end-1 || end < n {
 			line += "\n"

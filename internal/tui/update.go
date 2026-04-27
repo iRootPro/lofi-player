@@ -363,6 +363,16 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	if len(m.cfg.Stations) == 0 {
 		return m, nil
 	}
+	// Refuse to play YouTube stations when yt-dlp isn't on $PATH —
+	// otherwise mpv emits a generic "stream load failed" error and
+	// the user has to guess at the cause.
+	if !m.youtubeReady && m.cfg.Stations[m.cursor].IsYouTube() {
+		m.toast = &Toast{
+			Message: "yt-dlp not installed — install it to play YouTube stations",
+			Kind:    ToastError,
+		}
+		return m, clearToastAfter()
+	}
 	if m.cursor == m.playingIdx {
 		// Toggle pause/resume on the currently-playing station.
 		if m.playing {
