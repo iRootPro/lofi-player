@@ -75,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 
 Auto-detects OS/arch, pulls the matching tarball from the latest
 release, drops the binary into `~/.local/bin`. Override with
-`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.1.1`.
+`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.1.2`.
 
 You'll also need `mpv` (and optionally `yt-dlp`) — see
 [runtime dependencies](#runtime-dependencies) below. The installer
