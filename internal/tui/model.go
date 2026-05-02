@@ -196,7 +196,11 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	}
 
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
+	// Meter reads as a visibly-animated bar (▰▱▱ → ▰▰▱ → ▰▰▰) and
+	// matches the volume/buffer bars used elsewhere in the UI. The
+	// previous spinner.Dot rendered as braille, which was easy to
+	// mistake for a static glyph during slow stream loads.
+	sp.Spinner = spinner.Meter
 	sp.Style = lipgloss.NewStyle().Foreground(t.Muted)
 
 	showStreamInfo := true

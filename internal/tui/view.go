@@ -13,7 +13,7 @@ import (
 
 const (
 	leftPad     = "    "
-	volumeWidth = 14
+	volumeWidth = 8
 	// nowPlayingMaxWidth caps the now-playing card so it doesn't
 	// stretch across very wide terminals. The card is the focal
 	// element of the screen; an 80-cell width keeps it readable
@@ -47,7 +47,7 @@ const (
 // terminals wide enough for it. Below this threshold the frame
 // shrinks to fit; above it, the frame is centered so the app reads
 // as a contained panel rather than a full-screen TUI.
-const appFrameWidth = 100
+const appFrameWidth = 120
 
 // View renders the model. Returns an empty string until the first
 // WindowSizeMsg arrives so the user never sees a stretched flash on
@@ -93,10 +93,7 @@ func (m Model) View() string {
 
 	title := iconLogo + " lofi.player"
 	rightLabel := inner.renderVolume()
-	// "?" picks up the brand Primary so it reads as part of the same
-	// interactive-element family as the logo and the volume icon;
-	// "help" stays muted so the hint sits quietly in the border.
-	bottomLabel := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
+	bottomLabel := inner.renderBottomHelp(frameWidth)
 
 	framed := renderFrame(
 		content,
@@ -104,7 +101,7 @@ func (m Model) View() string {
 		rightLabel,
 		bottomLabel,
 		frameWidth,
-		lipgloss.NewStyle().Foreground(m.theme.Muted),
+		lipgloss.NewStyle().Foreground(m.theme.Muted).Faint(true),
 		m.styles.AppTitle,
 	)
 
@@ -121,7 +118,7 @@ func (m Model) viewMixer() string {
 		backdrop = m.viewFull()
 	}
 	card := m.mixerUI.view(m.width, m.styles, m.theme)
-	return backdrop + "\n\n" + card
+	return overlayModal(backdrop, card)
 }
 
 // viewConfirmDelete renders a small "delete <name>?" card centered in
@@ -156,7 +153,7 @@ func (m Model) viewConfirmDelete() string {
 		Render(prompt + "\n\n" + hint)
 
 	centered := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card)
-	return backdrop + "\n\n" + centered
+	return overlayModal(backdrop, centered)
 }
 
 // viewAddStation overlays the add-station modal on top of whichever
@@ -171,7 +168,41 @@ func (m Model) viewAddStation() string {
 		backdrop = m.viewFull()
 	}
 	form := m.addForm.view(m.width, m.styles, m.theme.Muted)
-	return backdrop + "\n\n" + form
+	return overlayModal(backdrop, form)
+}
+
+// overlayModal replaces the middle rows of the current screen with a
+// pre-rendered, horizontally-centered modal. Previously modal views were
+// appended below the backdrop (`backdrop + "\n\n" + card`), which made
+// the whole app jump taller. Replacing rows keeps the frame height stable
+// and makes add/edit/delete/mixer feel like true overlays.
+func overlayModal(backdrop, modal string) string {
+	if modal == "" {
+		return backdrop
+	}
+
+	backdropLines := strings.Split(backdrop, "\n")
+	modalLines := strings.Split(modal, "\n")
+	if len(backdropLines) < len(modalLines) {
+		missing := len(modalLines) - len(backdropLines)
+		top := missing / 2
+		bottom := missing - top
+		padded := make([]string, 0, len(modalLines))
+		for range top {
+			padded = append(padded, "")
+		}
+		padded = append(padded, backdropLines...)
+		for range bottom {
+			padded = append(padded, "")
+		}
+		backdropLines = padded
+	}
+
+	start := (len(backdropLines) - len(modalLines)) / 2
+	for i, line := range modalLines {
+		backdropLines[start+i] = line
+	}
+	return strings.Join(backdropLines, "\n")
 }
 
 func (m Model) viewFull() string {
@@ -194,19 +225,19 @@ func (m Model) renderBody() string {
 	b.WriteString(m.renderStations())
 	left := b.String()
 
-	logo := m.renderLogo()
-	if logo == "" {
+	right := m.renderRightPanel()
+	if right == "" {
 		return left
 	}
 
 	leftWidth := lipgloss.Width(left)
-	logoWidth := lipgloss.Width(logo)
-	gutter := m.width - leftWidth - logoWidth - logoSidePadding
+	rightWidth := lipgloss.Width(right)
+	gutter := m.width - leftWidth - rightWidth - logoSidePadding
 	if gutter < logoMinGutter {
 		return left
 	}
 	spacer := strings.Repeat(" ", gutter)
-	return lipgloss.JoinHorizontal(lipgloss.Center, left, spacer, logo)
+	return lipgloss.JoinHorizontal(lipgloss.Center, left, spacer, right)
 }
 
 // viewMini renders the compact layout suitable for living in a tmux
@@ -455,6 +486,13 @@ func (m Model) statusBlock() string {
 // doesn't reflow when a verbose value arrives.
 func (m Model) formatTrack(maxWidth int) string {
 	if m.currentTrack.Title == "" && m.currentTrack.Artist == "" {
+		// During buffering tell the user it's loading so the empty
+		// track row doesn't read as "stuck" — some streams take 5–10 s
+		// to start serving data, and a silent placeholder there is
+		// indistinguishable from a bug.
+		if m.loading {
+			return m.styles.Hint.Render("loading…")
+		}
 		return m.styles.Hint.Render("…")
 	}
 
@@ -526,6 +564,52 @@ func (m Model) renderLogo() string {
 	return out.String()
 }
 
+// renderRightPanel combines the low-contrast logo with a small live
+// audio meter. The meter makes the right side feel functional instead
+// of purely decorative, while keeping the same terminal/lofi language
+// as the rest of the interface.
+func (m Model) renderRightPanel() string {
+	logo := m.renderLogo()
+	if logo == "" {
+		return ""
+	}
+	logoWidth := lipgloss.Width(logo)
+	meter := m.renderAudioMeter(logoWidth)
+	if meter == "" {
+		return logo
+	}
+	return meter + "\n\n" + logo
+}
+
+var audioMeterGlyphs = []rune("▁▂▃▄▅▆▇")
+var audioMeterPattern = []int{1, 3, 5, 2, 6, 4, 2, 5, 3, 1, 4, 6, 2, 5}
+
+func (m Model) renderAudioMeter(width int) string {
+	if width <= 0 || (m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations)) {
+		return ""
+	}
+
+	var b strings.Builder
+	for i, level := range audioMeterPattern {
+		if m.playing || m.loading {
+			level = audioMeterPattern[(i+m.logo.tick)%len(audioMeterPattern)]
+		} else {
+			level = 1
+		}
+		glyph := string(audioMeterGlyphs[level])
+		style := m.styles.LogoBase
+		switch {
+		case level >= 6:
+			style = m.styles.LogoCrest
+		case level >= 4:
+			style = m.styles.LogoMid
+		}
+		b.WriteString(style.Render(glyph))
+	}
+
+	return lipgloss.PlaceHorizontal(width, lipgloss.Center, b.String())
+}
+
 // logoCellStyle picks a colour band by signed distance from the
 // shimmer crest: 0 is the bright peak, ±1..±halo is the soft halo,
 // the rest stays on the muted base — three soft bands with no hard
@@ -544,22 +628,52 @@ func logoCellStyle(s Styles, dist int) lipgloss.Style {
 	}
 }
 
-// renderVolume composes the volume widget — speaker icon followed by
-// the fill bar. Lives as the right-side label in the frame's top
-// border. The bar is enough on its own; the digit/percent text was
-// just visual repetition.
+// renderVolume composes the compact volume widget in the top border:
+// speaker icon, short segmented rail, and percent text. The percent
+// removes guesswork while the shorter rail keeps the title bar calm.
 func (m Model) renderVolume() string {
 	v := clampVolume(m.volume)
-	fill := v * volumeWidth / 100
+	fill := (v*volumeWidth + 50) / 100
 	bar := m.styles.VolFill.Render(strings.Repeat("▰", fill)) +
 		m.styles.VolEmpty.Render(strings.Repeat("▱", volumeWidth-fill))
-	return m.styles.VolLabel.Render(iconVolume) + " " + bar
+	return m.styles.VolLabel.Render(iconVolume) + " " + bar + " " +
+		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", v))
+}
+
+func (m Model) renderBottomHelp(frameWidth int) string {
+	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
+
+	keyStyle := m.styles.AppTitle
+	parts := []string{
+		keyStyle.Render("space") + " " + m.styles.HelpDesc.Render("play/pause"),
+		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render("station"),
+		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
+		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
+		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render("help"),
+	}
+	sep := m.styles.HelpSep.Render("  ·  ")
+	full := strings.Join(parts, sep)
+	if lipgloss.Width(full) > frameWidth-7 {
+		return short
+	}
+	return full
 }
 
 // stationsViewportHeight caps how many station rows the list shows at
 // once. Above this the list scrolls with the cursor, with `↑/↓ N more`
 // hints so the user can tell something is hidden.
 const stationsViewportHeight = 8
+
+func (m Model) stationRowWidth() int {
+	w := m.width - len(leftPad)*2
+	if w > 46 {
+		return 46
+	}
+	if w < 20 {
+		return 20
+	}
+	return w
+}
 
 func (m Model) renderStations() string {
 	if len(m.cfg.Stations) == 0 {
@@ -588,9 +702,10 @@ func (m Model) renderStations() string {
 		b.WriteString("\n")
 	}
 
+	rowWidth := m.stationRowWidth()
 	for i := start; i < end; i++ {
 		s := m.cfg.Stations[i]
-		// Three-cell prefix: cursor chevron + space + playing-status dot.
+		// Fixed prefix: navigation cursor + playing-status dot.
 		// The dot column is consistent so names line up regardless of
 		// which row is selected or playing.
 		cursor := "  "
@@ -604,26 +719,34 @@ func (m Model) renderStations() string {
 		}
 
 		unavailable := s.IsYouTube() && !m.youtubeReady
+		suffix := ""
+		if badge := m.stationKindBadge(s); badge != "" {
+			suffix += "  " + badge
+		}
+		if unavailable {
+			suffix += "  " + m.styles.Hint.Render("unavailable")
+		}
+
+		nameBudget := rowWidth - lipgloss.Width(cursor) - lipgloss.Width(marker) - 1 - lipgloss.Width(suffix)
+		if nameBudget < 8 {
+			nameBudget = 8
+		}
+		displayName := truncateRunes(s.Name, nameBudget)
 
 		var name string
 		switch {
 		case unavailable:
-			name = m.styles.Hint.Render(s.Name)
+			name = m.styles.Hint.Render(displayName)
 		case i == m.cursor:
-			name = m.styles.Cursor.Render(s.Name)
+			name = m.styles.Cursor.Render(displayName)
 		case i == m.playingIdx:
-			name = m.styles.StationPlaying.Render(s.Name)
+			name = m.styles.StationPlaying.Render(displayName)
 		default:
-			name = m.styles.StationItem.Render(s.Name)
+			name = m.styles.StationItem.Render(displayName)
 		}
 
-		line := leftPad + cursor + marker + " " + name
-		if badge := m.stationKindBadge(s); badge != "" {
-			line += "  " + badge
-		}
-		if unavailable {
-			line += "  " + m.styles.Hint.Render("unavailable")
-		}
+		lineContent := cursor + marker + " " + name + suffix
+		line := leftPad + lineContent
 		if i < end-1 || end < n {
 			line += "\n"
 		}

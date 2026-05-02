@@ -47,10 +47,42 @@ func send(t *testing.T, m Model, keys ...string) Model {
 		default:
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		}
-		next, _ := m.Update(msg)
+		next, cmd := m.Update(msg)
 		m = next.(Model)
+		// Drain immediate cmd output so post-conditions (e.g. ambient
+		// SetVolume side effects, which now run via tea.Cmd) actually
+		// land before the next assertion. Skips ticks/timers — only
+		// dispatches commands whose synchronous result is a non-tick
+		// non-key value.
+		if cmd != nil {
+			drainCmd(t, cmd)
+		}
 	}
 	return m
+}
+
+// drainCmd runs cmd synchronously. tea.Batch packs multiple cmds; we
+// can't introspect them from outside bubbletea, so we just call the
+// outer function — for batch it returns a BatchMsg containing the
+// inner cmds, and we execute each.
+//
+// fixture() builds models with a nil *audio.Player; cmds that touch
+// it (setVolumeCmd, pause/resume) panic when forced to run here. In
+// production tea.Program owns goroutine lifecycle and never
+// dispatches into these on the nil-player path. recover() keeps the
+// tests honest about post-conditions without forcing us to fake mpv.
+func drainCmd(t *testing.T, cmd tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		return
+	}
+	defer func() { _ = recover() }()
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			drainCmd(t, c)
+		}
+	}
 }
 
 func TestView_RendersWhenSized(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
@@ -38,12 +39,14 @@ const (
 	mixerStepCoarse = 25
 )
 
-// handle applies a single key string to the mixer. Volume changes are
-// pushed straight to the audio mixer; the model itself doesn't cache
-// them.
-func (m mixerModel) handle(key string) mixerModel {
+// handle applies a single key string to the mixer. Returns the
+// updated model plus an optional tea.Cmd for the IPC volume change —
+// running it in a goroutine keeps the Update loop responsive when
+// mpv stalls (sync calls used to freeze the UI for up to 4 s under a
+// busy mpv during auto-repeat).
+func (m mixerModel) handle(key string) (mixerModel, tea.Cmd) {
 	if m.mixer == nil {
-		return m
+		return m, nil
 	}
 	ids := m.mixer.ChannelIDs()
 	switch key {
@@ -51,40 +54,55 @@ func (m mixerModel) handle(key string) mixerModel {
 		if m.selected < len(ids)-1 {
 			m.selected++
 		}
+		return m, nil
 	case "k", "up":
 		if m.selected > 0 {
 			m.selected--
 		}
+		return m, nil
 	case "l", "right":
-		m.adjust(mixerStepFine)
+		return m, m.adjustCmd(mixerStepFine)
 	case "h", "left":
-		m.adjust(-mixerStepFine)
+		return m, m.adjustCmd(-mixerStepFine)
 	case "L":
-		m.adjust(mixerStepCoarse)
+		return m, m.adjustCmd(mixerStepCoarse)
 	case "H":
-		m.adjust(-mixerStepCoarse)
+		return m, m.adjustCmd(-mixerStepCoarse)
 	case "0":
-		m.set(0)
+		return m, m.setCmd(0)
 	case "1":
-		m.set(100)
+		return m, m.setCmd(100)
 	}
-	return m
+	return m, nil
 }
 
-func (m mixerModel) adjust(delta int) {
+func (m mixerModel) adjustCmd(delta int) tea.Cmd {
 	id := m.Selected()
 	if id == "" {
-		return
+		return nil
 	}
-	_ = m.mixer.SetVolume(id, m.mixer.Volume(id)+delta)
+	target := m.mixer.Volume(id) + delta
+	mixer := m.mixer
+	return func() tea.Msg {
+		if err := mixer.SetVolume(id, target); err != nil {
+			return CommandFailedMsg{Action: "set " + id + " volume", Err: err}
+		}
+		return nil
+	}
 }
 
-func (m mixerModel) set(v int) {
+func (m mixerModel) setCmd(v int) tea.Cmd {
 	id := m.Selected()
 	if id == "" {
-		return
+		return nil
 	}
-	_ = m.mixer.SetVolume(id, v)
+	mixer := m.mixer
+	return func() tea.Msg {
+		if err := mixer.SetVolume(id, v); err != nil {
+			return CommandFailedMsg{Action: "set " + id + " volume", Err: err}
+		}
+		return nil
+	}
 }
 
 const mixerBarWidth = 14

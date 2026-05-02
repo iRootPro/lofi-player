@@ -42,6 +42,16 @@ type PlaybackErrorMsg struct {
 	Err error
 }
 
+// CommandFailedMsg fires when a one-shot mpv command (set_property
+// for volume, pause/resume) failed — usually because mpv was busy
+// and the IPC request timed out. Distinct from PlaybackErrorMsg so
+// the UI can surface a toast without tearing down the now-playing
+// state: mpv's playback is fine, only the command didn't land.
+type CommandFailedMsg struct {
+	Action string
+	Err    error
+}
+
 // EOFMsg fires when a stream ends. For live streams this normally only
 // happens when the server shuts down.
 type EOFMsg struct{}

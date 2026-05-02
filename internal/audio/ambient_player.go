@@ -66,14 +66,14 @@ func newAmbientPlayer(ctx context.Context, filePath string) (*ambientPlayer, err
 }
 
 func (p *ambientPlayer) setVolume(v int) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := p.ipc.command(ctx, "set_property", "volume", clampVolume(v))
 	return err
 }
 
 func (p *ambientPlayer) setPaused(paused bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := p.ipc.command(ctx, "set_property", "pause", paused)
 	return err

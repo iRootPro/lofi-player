@@ -270,7 +270,10 @@ func (p *Player) SetVolume(percent int) error {
 }
 
 func (p *Player) setProperty(name string, value any) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// 5 s is generous enough to outlast a transient mpv stall (network
+	// reconnect, big ICY metadata blob, demuxer reload) without making
+	// the user wait painfully for the failure when mpv is truly hung.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := p.ipc.command(ctx, "set_property", name, value)
 	if err != nil {

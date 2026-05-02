@@ -25,11 +25,13 @@ func playCmd(p *audio.Player, url string) tea.Cmd {
 }
 
 // pauseCmd asks mpv to pause; the matching PlaybackPausedMsg arrives via
-// the event subscription, not as a direct return.
+// the event subscription, not as a direct return. A failure here is a
+// transient IPC issue, not a stream death — surface it as a toast,
+// don't rip down the now-playing card.
 func pauseCmd(p *audio.Player) tea.Cmd {
 	return func() tea.Msg {
 		if err := p.Pause(); err != nil {
-			return PlaybackErrorMsg{Err: err}
+			return CommandFailedMsg{Action: "pause", Err: err}
 		}
 		return nil
 	}
@@ -39,7 +41,7 @@ func pauseCmd(p *audio.Player) tea.Cmd {
 func resumeCmd(p *audio.Player) tea.Cmd {
 	return func() tea.Msg {
 		if err := p.Resume(); err != nil {
-			return PlaybackErrorMsg{Err: err}
+			return CommandFailedMsg{Action: "resume", Err: err}
 		}
 		return nil
 	}
@@ -49,7 +51,7 @@ func resumeCmd(p *audio.Player) tea.Cmd {
 func setVolumeCmd(p *audio.Player, percent int) tea.Cmd {
 	return func() tea.Msg {
 		if err := p.SetVolume(percent); err != nil {
-			return PlaybackErrorMsg{Err: err}
+			return CommandFailedMsg{Action: "set volume", Err: err}
 		}
 		return nil
 	}

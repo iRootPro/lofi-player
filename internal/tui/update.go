@@ -122,6 +122,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cacheSeconds = msg.Seconds
 		return m, waitForEvent(m.player)
 
+	case CommandFailedMsg:
+		// Transient IPC failure (mpv was busy, request timed out) —
+		// not a stream death. Toast and move on; do NOT touch
+		// playingIdx / streamInfo / playStartedAt the way
+		// PlaybackErrorMsg does.
+		m.toast = &Toast{
+			Message: fmt.Sprintf("%s failed: %v", msg.Action, msg.Err),
+			Kind:    ToastError,
+		}
+		return m, clearToastAfter()
+
 	case clearToastMsg:
 		m.toast = nil
 		return m, nil
@@ -411,9 +422,10 @@ func (m Model) updateMixer(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	}
-	m.mixerUI = m.mixerUI.handle(km.String())
-	nm, cmd := m.scheduleAmbientSave()
-	return nm, cmd
+	var ipcCmd tea.Cmd
+	m.mixerUI, ipcCmd = m.mixerUI.handle(km.String())
+	nm, saveCmd := m.scheduleAmbientSave()
+	return nm, tea.Batch(ipcCmd, saveCmd)
 }
 
 // scheduleAmbientSave bumps the debounce sequence and returns a tick
