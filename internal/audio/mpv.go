@@ -180,10 +180,19 @@ func (c *ipcClient) readLoop(maxBuf int) {
 				Data:   msg.Data,
 				Reason: msg.Reason,
 			}
+			// Do not let event backpressure starve command responses. Some
+			// streams (notably YouTube via ytdl_hook) can emit bursts of
+			// property changes while loading or buffering; if the TUI is not
+			// draining events fast enough, blocking here prevents this read loop
+			// from reaching later request_id responses and harmless commands like
+			// set volume time out with context deadline exceeded. Dropping an
+			// over-capacity event is preferable: observed properties are state
+			// snapshots and mpv will send another update soon.
 			select {
 			case c.events <- evt:
 			case <-c.done:
 				return
+			default:
 			}
 		case msg.RequestID != 0:
 			if ch, ok := c.pending.LoadAndDelete(msg.RequestID); ok {

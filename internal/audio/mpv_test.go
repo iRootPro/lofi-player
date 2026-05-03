@@ -182,6 +182,69 @@ func TestReadLoop_MalformedLineSkipped(t *testing.T) {
 	}
 }
 
+func TestCommand_ResponseNotStarvedByFullEventQueue(t *testing.T) {
+	c, server := pipePair(t, defaultIPCBuf)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := c.command(context.Background(), "set_property", "volume", 55)
+		result <- err
+	}()
+
+	scanner := bufio.NewScanner(server)
+	if !scanner.Scan() {
+		t.Fatal("scanner ended before reading request")
+	}
+	var req ipcRequest
+	if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+
+	// Simulate a noisy stream that fills the event queue before mpv's
+	// command response arrives. The IPC reader must keep reading and route
+	// the response instead of blocking forever on an undrained Events chan.
+	writeErr := make(chan error, 1)
+	go func() {
+		for i := 0; i < cap(c.events)+10; i++ {
+			line := fmt.Sprintf(`{"event":"property-change","id":9,"name":"demuxer-cache-state","data":{"fw-bytes":%d}}`+"\n", i)
+			if _, err := server.Write([]byte(line)); err != nil {
+				writeErr <- fmt.Errorf("write event %d: %w", i, err)
+				return
+			}
+		}
+		resp, _ := json.Marshal(ipcResponse{RequestID: req.RequestID, Error: "success"})
+		if _, err := server.Write(append(resp, '\n')); err != nil {
+			writeErr <- fmt.Errorf("write response: %w", err)
+			return
+		}
+		writeErr <- nil
+	}()
+
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("command returned error: %v", err)
+		}
+		if err := <-writeErr; err != nil {
+			t.Fatal(err)
+		}
+	case err := <-writeErr:
+		if err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case err := <-result:
+			if err != nil {
+				t.Fatalf("command returned error: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for command response after writes completed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for command response; event backpressure likely starved responses")
+	}
+}
+
 func TestCommand_ContextCancellation(t *testing.T) {
 	c, _ := pipePair(t, defaultIPCBuf)
 
