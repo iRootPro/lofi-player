@@ -103,6 +103,7 @@ type Options struct {
 // process exits unexpectedly.
 type Player struct {
 	cmd       *exec.Cmd
+	exited    *processWaiter
 	ipc       *ipcClient
 	socketDir string
 	events    chan Event
@@ -121,6 +122,30 @@ type Player struct {
 	// times per second; we only forward when the value moves past a
 	// quarter-second threshold to keep the event channel quiet.
 	lastCacheSec float64
+}
+
+func mainMPVArgs(socketPath string) []string {
+	return []string{
+		"--no-config",
+		"--idle=yes",
+		"--no-video",
+		"--no-terminal",
+		"--input-ipc-server=" + socketPath,
+	}
+}
+
+func ambientMPVArgs(socketPath, filePath string) []string {
+	return []string{
+		"--no-config",
+		"--idle=no",
+		"--no-video",
+		"--no-terminal",
+		"--loop-file=inf",
+		"--volume=0",
+		"--pause=yes",
+		"--input-ipc-server=" + socketPath,
+		filePath,
+	}
 }
 
 // NewPlayer spawns mpv in idle mode and establishes a JSON-IPC connection
@@ -149,52 +174,31 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 	socketPath := filepath.Join(socketDir, "mpv.sock")
 
 	var stderr bytes.Buffer
-	cmd := exec.Command(mpvPath,
-		"--idle=yes",
-		"--no-video",
-		"--no-terminal",
-		"--really-quiet",
-		"--input-ipc-server="+socketPath,
-	)
+	cmd := exec.Command(mpvPath, mainMPVArgs(socketPath)...)
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		os.RemoveAll(socketDir)
 		return nil, fmt.Errorf("start mpv: %w", err)
 	}
 
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	exited := newProcessWaiter(cmd)
 
 	if err := waitForSocketOrExit(ctx, socketPath, 5*time.Second, exited); err != nil {
-		// If mpv is still alive, terminate it; otherwise it already exited.
-		select {
-		case <-exited:
-		default:
-			_ = cmd.Process.Kill()
-			<-exited
-		}
+		terminateMPVProcess(cmd, exited)
 		os.RemoveAll(socketDir)
-		stderrSnippet := strings.TrimSpace(stderr.String())
-		if stderrSnippet != "" {
-			return nil, fmt.Errorf("mpv did not open IPC socket: %w; mpv stderr: %s", err, stderrSnippet)
-		}
-		return nil, fmt.Errorf("mpv did not open IPC socket: %w", err)
+		return nil, formatMPVStartupError(err, stderr.String(), cmd.Args)
 	}
 
 	ipc, err := dialIPC(socketPath)
 	if err != nil {
-		select {
-		case <-exited:
-		default:
-			_ = cmd.Process.Kill()
-			<-exited
-		}
+		terminateMPVProcess(cmd, exited)
 		os.RemoveAll(socketDir)
 		return nil, fmt.Errorf("dial mpv: %w", err)
 	}
 
 	p := &Player{
 		cmd:       cmd,
+		exited:    exited,
 		ipc:       ipc,
 		socketDir: socketDir,
 		events:    make(chan Event, 32),
@@ -300,19 +304,7 @@ func (p *Player) Close() error {
 			cancel()
 			_ = p.ipc.close()
 		}
-		if p.cmd != nil && p.cmd.Process != nil {
-			done := make(chan struct{})
-			go func() {
-				_ = p.cmd.Wait()
-				close(done)
-			}()
-			select {
-			case <-done:
-			case <-time.After(2 * time.Second):
-				_ = p.cmd.Process.Kill()
-				<-done
-			}
-		}
+		waitForMPVProcessExit(p.cmd, p.exited, 2*time.Second)
 		if p.socketDir != "" {
 			_ = os.RemoveAll(p.socketDir)
 		}
@@ -512,19 +504,124 @@ func clampVolume(v int) int {
 	}
 }
 
+type processWaiter struct {
+	done chan struct{}
+	err  error
+}
+
+func newProcessWaiter(cmd *exec.Cmd) *processWaiter {
+	w := &processWaiter{done: make(chan struct{})}
+	go func() {
+		w.err = cmd.Wait()
+		close(w.done)
+	}()
+	return w
+}
+
+func (w *processWaiter) Done() <-chan struct{} {
+	if w == nil {
+		return nil
+	}
+	return w.done
+}
+
+func (w *processWaiter) Err() error {
+	if w == nil {
+		return nil
+	}
+	<-w.done
+	return w.err
+}
+
+func terminateMPVProcess(cmd *exec.Cmd, exited *processWaiter) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	select {
+	case <-exited.Done():
+		return
+	default:
+	}
+	_ = cmd.Process.Kill()
+	waitForMPVProcessExit(cmd, exited, 2*time.Second)
+}
+
+func waitForMPVProcessExit(cmd *exec.Cmd, exited *processWaiter, timeout time.Duration) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	if exited == nil {
+		done := make(chan struct{})
+		go func() {
+			_ = cmd.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(timeout):
+			_ = cmd.Process.Kill()
+			<-done
+		}
+		return
+	}
+
+	select {
+	case <-exited.Done():
+		return
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+	}
+	select {
+	case <-exited.Done():
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+func formatMPVStartupError(err error, stderr string, args []string) error {
+	details := make([]string, 0, 3)
+	if snippet := trimForError(stderr, 2000); snippet != "" {
+		details = append(details, "mpv stderr: "+snippet)
+	}
+	if len(args) > 0 {
+		details = append(details, "command: "+formatCommandForError(args))
+	}
+	details = append(details, "hint: lofi-player starts mpv with --no-config to avoid user mpv.conf/scripts; try `mpv --no-config --idle=yes --no-video --no-terminal --input-ipc-server=/tmp/lofi-test.sock` to diagnose mpv itself")
+	return fmt.Errorf("mpv did not open IPC socket: %w; %s", err, strings.Join(details, "; "))
+}
+
+func trimForError(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
+func formatCommandForError(args []string) string {
+	formatted := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.ContainsAny(arg, " \t\n\"'") {
+			formatted = append(formatted, fmt.Sprintf("%q", arg))
+			continue
+		}
+		formatted = append(formatted, arg)
+	}
+	return strings.Join(formatted, " ")
+}
+
 // waitForSocketOrExit polls for the socket file to appear, returning
 // early if mpv exits beforehand (in which case the error wraps mpv's
 // exit status — usually a nil exit means "exited cleanly without error
 // but never opened the socket", which still counts as failure here).
-func waitForSocketOrExit(ctx context.Context, path string, timeout time.Duration, exited <-chan error) error {
+func waitForSocketOrExit(ctx context.Context, path string, timeout time.Duration, exited *processWaiter) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
 			return nil
 		}
 		select {
-		case waitErr := <-exited:
-			if waitErr != nil {
+		case <-exited.Done():
+			if waitErr := exited.Err(); waitErr != nil {
 				return fmt.Errorf("mpv exited prematurely: %w", waitErr)
 			}
 			return errors.New("mpv exited prematurely with status 0")

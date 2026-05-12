@@ -1,8 +1,13 @@
 package audio
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 )
 
 // translateOne is the only Player surface that's testable without an
@@ -169,4 +174,86 @@ func TestClampVolume(t *testing.T) {
 			t.Errorf("clampVolume(%d) = %d, want %d", tc.in, got, tc.want)
 		}
 	}
+}
+
+func TestMPVArgsDisableUserConfig(t *testing.T) {
+	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock")
+	if !hasArg(mainArgs, "--no-config") {
+		t.Fatalf("main mpv args %v do not disable user config", mainArgs)
+	}
+	if hasArg(mainArgs, "--really-quiet") {
+		t.Fatalf("main mpv args %v suppress startup diagnostics", mainArgs)
+	}
+	if !hasArg(mainArgs, "--input-ipc-server=/tmp/lofi-player-test.sock") {
+		t.Fatalf("main mpv args %v do not configure IPC socket", mainArgs)
+	}
+
+	ambientArgs := ambientMPVArgs("/tmp/lofi-ambient-test.sock", "/tmp/rain.opus")
+	if !hasArg(ambientArgs, "--no-config") {
+		t.Fatalf("ambient mpv args %v do not disable user config", ambientArgs)
+	}
+	if hasArg(ambientArgs, "--really-quiet") {
+		t.Fatalf("ambient mpv args %v suppress startup diagnostics", ambientArgs)
+	}
+	if !hasArg(ambientArgs, "/tmp/rain.opus") {
+		t.Fatalf("ambient mpv args %v do not include file path", ambientArgs)
+	}
+}
+
+func TestFormatMPVStartupErrorIncludesDiagnostics(t *testing.T) {
+	err := formatMPVStartupError(context.DeadlineExceeded, "fatal: bad option\n", []string{"mpv", "--no-config", "--input-ipc-server=/tmp/lofi.sock"})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("formatted error does not wrap deadline: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"mpv did not open IPC socket", "fatal: bad option", "--no-config", "--input-ipc-server=/tmp/lofi.sock", "hint:"} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("formatted error %q does not contain %q", msg, want)
+		}
+	}
+}
+
+func TestWaitForSocketOrExitContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := waitForSocketOrExit(ctx, "/tmp/lofi-player-test-missing.sock", time.Second, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForSocketOrExit() = %v, want context.Canceled", err)
+	}
+}
+
+func TestTerminateMPVProcessDoesNotBlockAfterProcessAlreadyExited(t *testing.T) {
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper process: %v", err)
+	}
+	exited := newProcessWaiter(cmd)
+	select {
+	case <-exited.Done():
+		if err := exited.Err(); err != nil {
+			t.Fatalf("helper process exited with error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("helper process did not exit")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		terminateMPVProcess(cmd, exited)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("terminateMPVProcess blocked after process had already exited")
+	}
+}
+
+func hasArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
 }

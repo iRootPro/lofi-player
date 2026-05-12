@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 type ambientPlayer struct {
 	cmd       *exec.Cmd
+	exited    *processWaiter
 	ipc       *ipcClient
 	socketDir string
 	closeOnce sync.Once
@@ -27,42 +29,29 @@ func newAmbientPlayer(ctx context.Context, filePath string) (*ambientPlayer, err
 	}
 	socketPath := filepath.Join(socketDir, "mpv.sock")
 
-	cmd := exec.Command("mpv",
-		"--idle=no",
-		"--no-video",
-		"--no-terminal",
-		"--really-quiet",
-		"--loop-file=inf",
-		"--volume=0",
-		"--pause=yes",
-		"--input-ipc-server="+socketPath,
-		filePath,
-	)
+	var stderr bytes.Buffer
+	cmd := exec.Command("mpv", ambientMPVArgs(socketPath, filePath)...)
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		os.RemoveAll(socketDir)
 		return nil, fmt.Errorf("start mpv: %w", err)
 	}
 
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	exited := newProcessWaiter(cmd)
 
 	if err := waitForSocketOrExit(ctx, socketPath, 5*time.Second, exited); err != nil {
-		// waitForSocketOrExit may have consumed the exit value from `exited`
-		// when mpv died early, so a follow-up <-exited would block forever.
-		// Best-effort kill is enough; the goroutine sends to a buffered
-		// channel (size 1) and exits cleanly once cmd.Wait returns.
-		_ = cmd.Process.Kill()
+		terminateMPVProcess(cmd, exited)
 		os.RemoveAll(socketDir)
-		return nil, fmt.Errorf("mpv socket did not appear: %w", err)
+		return nil, formatMPVStartupError(err, stderr.String(), cmd.Args)
 	}
 
 	ipc, err := dialIPC(socketPath)
 	if err != nil {
-		_ = cmd.Process.Kill()
+		terminateMPVProcess(cmd, exited)
 		os.RemoveAll(socketDir)
 		return nil, fmt.Errorf("dial mpv: %w", err)
 	}
-	return &ambientPlayer{cmd: cmd, ipc: ipc, socketDir: socketDir}, nil
+	return &ambientPlayer{cmd: cmd, exited: exited, ipc: ipc, socketDir: socketDir}, nil
 }
 
 func (p *ambientPlayer) setVolume(v int) error {
@@ -87,16 +76,7 @@ func (p *ambientPlayer) close() {
 			cancel()
 			_ = p.ipc.close()
 		}
-		if p.cmd != nil && p.cmd.Process != nil {
-			done := make(chan struct{})
-			go func() { _ = p.cmd.Wait(); close(done) }()
-			select {
-			case <-done:
-			case <-time.After(2 * time.Second):
-				_ = p.cmd.Process.Kill()
-				<-done
-			}
-		}
+		waitForMPVProcessExit(p.cmd, p.exited, 2*time.Second)
 		if p.socketDir != "" {
 			_ = os.RemoveAll(p.socketDir)
 		}
