@@ -3,9 +3,11 @@ package tui
 import (
 	"time"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
+	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 )
 
 // toastLifetime is how long a Toast stays visible before a delayed Tick
@@ -97,6 +99,23 @@ func clearToastAfter() tea.Cmd {
 	return tea.Tick(toastLifetime, func(time.Time) tea.Msg {
 		return clearToastMsg{}
 	})
+}
+
+func copyShareCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		return shareCopiedMsg{Err: clipboard.WriteAll(text)}
+	}
+}
+
+func importClipboardCmd() tea.Cmd {
+	return func() tea.Msg {
+		text, err := clipboard.ReadAll()
+		if err != nil {
+			return importClipboardMsg{Err: err}
+		}
+		stations, err := sharepkg.Parse(text)
+		return importClipboardMsg{Stations: stations, Err: err}
+	}
 }
 
 // pulseInterval controls the live-indicator pulse cadence. A long

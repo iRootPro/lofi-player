@@ -264,6 +264,63 @@ func TestKeyMapHasMixerOpenX(t *testing.T) {
 	t.Error("MixerOpen does not include 'x'")
 }
 
+func TestPressSOpensShareModal(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "s")
+	if m.mode != modeShareStation {
+		t.Fatalf("mode after s: got %v, want modeShareStation", m.mode)
+	}
+	if !strings.Contains(m.shareSnippet, "stations:") || !strings.Contains(m.shareSnippet, "name: A") {
+		t.Fatalf("share snippet missing station data:\n%s", m.shareSnippet)
+	}
+}
+
+func TestShareEscClosesModal(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "s", "esc")
+	if m.mode != modeFull {
+		t.Fatalf("mode after s+esc: got %v, want modeFull", m.mode)
+	}
+	if m.shareSnippet != "" {
+		t.Fatalf("shareSnippet not cleared: %q", m.shareSnippet)
+	}
+}
+
+func TestImportClipboardMsgOpensPreviewAndSkipsDuplicates(t *testing.T) {
+	m := fixture()
+	updated, _ := m.Update(importClipboardMsg{Stations: []config.Station{
+		{Name: "B duplicate", URL: "http://b"},
+		{Name: "D", URL: "http://d"},
+	}})
+	m = updated.(Model)
+	if m.mode != modeImportStations {
+		t.Fatalf("mode after importClipboardMsg: got %v, want modeImportStations", m.mode)
+	}
+	if len(m.importStations) != 1 || m.importStations[0].Name != "D" || m.importSkipped != 1 {
+		t.Fatalf("import preview = %+v skipped=%d, want D and 1 skipped", m.importStations, m.importSkipped)
+	}
+}
+
+func TestCommitImportAppendsStations(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := fixture()
+	m.mode = modeImportStations
+	m.modePrev = modeFull
+	m.importStations = []config.Station{{Name: "D", URL: "http://d"}}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.mode != modeFull {
+		t.Fatalf("mode after commit import: got %v, want modeFull", m.mode)
+	}
+	if len(m.cfg.Stations) != 4 || m.cfg.Stations[3].Name != "D" {
+		t.Fatalf("stations after import = %+v", m.cfg.Stations)
+	}
+	if m.toast == nil || m.toast.Kind != ToastSuccess {
+		t.Fatalf("expected success toast, got %+v", m.toast)
+	}
+}
+
 func TestStationLineShowsActiveAmbient(t *testing.T) {
 	restore := audio.SetCacheDirForTest(t.TempDir())
 	t.Cleanup(restore)

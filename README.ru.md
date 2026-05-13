@@ -148,6 +148,8 @@ lofi-player
 | `a` | добавить станцию (модалка) |
 | `e` | редактировать выбранную станцию (модалка) |
 | `d` | удалить выбранную станцию (с подтверждением) |
+| `s` | поделиться выбранной станцией YAML-сниппетом |
+| `p` | импортировать сниппет станции из clipboard |
 | `x` | открыть эмбиент-микшер (модалка) |
 | `i` | переключить stream-info строку |
 | `?` | показать/скрыть полную справку |
@@ -189,6 +191,36 @@ lofi-player
 Удаление сейчас играющей станции ставит воспроизведение на паузу и
 очищает карточку «сейчас играет». Изменение пишется в `config.yaml`
 сразу.
+
+## Обмен станциями
+
+`lofi-player` делится станциями маленькими YAML-сниппетами, которые
+можно кинуть в Telegram, Slack, Discord, README или gist — без
+аккаунтов и сервера.
+
+Наведи курсор на станцию, нажми `s`, затем `enter`, чтобы скопировать:
+
+```yaml
+stations:
+  - name: SomaFM Groove Salad
+    url: https://ice1.somafm.com/groovesalad-256-mp3
+```
+
+Получатель копирует этот блок и жмёт `p` в TUI. Приложение покажет
+превью новых станций, пропустит дубликаты по URL и после подтверждения
+добавит остальные в `config.yaml`. Обычная скопированная `https://...`
+ссылка на поток тоже работает; hostname станет начальным именем станции. Clipboard зависит от окружения
+(`pbcopy` на macOS; `wl-copy`, `xclip` или `xsel` на Linux), поэтому
+карточка share всегда показывает текст — его можно скопировать руками.
+
+То же самое из CLI, без запуска mpv:
+
+```sh
+lofi-player --export-station "SomaFM Groove Salad"
+lofi-player --export-all > stations.yaml
+lofi-player --import stations.yaml
+lofi-player --import - < stations.yaml
+```
 
 ## Конфигурация
 
@@ -265,6 +297,7 @@ main.go                      entry: load config + state, start mpv, run TUI
 internal/
   audio/                     mpv subprocess + JSON-IPC client + ambient mixer
   config/                    YAML config + XDG paths + defaults
+  share/                     import/export YAML-сниппетов станций
   state/                     state.json — last-session persistence
   theme/                     color palettes
   tui/                       Bubble Tea model / update / view / keys / styles

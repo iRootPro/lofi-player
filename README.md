@@ -144,6 +144,8 @@ Quit with `q` or `ctrl+c`.
 | `a` | add station (modal) |
 | `e` | edit selected station (modal) |
 | `d` | delete selected station (with confirmation) |
+| `s` | share selected station as a YAML snippet |
+| `p` | import station snippet from clipboard |
 | `x` | open ambient mixer (modal) |
 | `i` | toggle stream-info row |
 | `?` | toggle full help card |
@@ -184,6 +186,35 @@ in mpv; if no station has been started yet, it is ignored.
 
 Deleting the currently-playing station pauses playback and clears the
 now-playing card. The change is written to `config.yaml` immediately.
+
+## Sharing stations
+
+`lofi-player` shares stations as small YAML snippets you can paste into
+Telegram, Slack, Discord, a README, or a gist — no accounts or backend.
+
+Press `s` on a station to open a share card, then `enter` to copy:
+
+```yaml
+stations:
+  - name: SomaFM Groove Salad
+    url: https://ice1.somafm.com/groovesalad-256-mp3
+```
+
+The receiver copies that snippet and presses `p` in the TUI. The app
+previews new stations, skips duplicates by URL, and appends the rest to
+`config.yaml` after confirmation. Plain copied `https://...` stream URLs
+work too; the hostname is used as the initial station name. Clipboard support depends on the host
+(`pbcopy` on macOS; `wl-copy`, `xclip`, or `xsel` on Linux), so the
+share card always shows the text for manual copying too.
+
+CLI users can do the same without starting mpv:
+
+```sh
+lofi-player --export-station "SomaFM Groove Salad"
+lofi-player --export-all > stations.yaml
+lofi-player --import stations.yaml
+lofi-player --import - < stations.yaml
+```
 
 ## Configuration
 
@@ -260,6 +291,7 @@ main.go                      entry: load config + state, start mpv, run TUI
 internal/
   audio/                     mpv subprocess + JSON-IPC client + ambient mixer
   config/                    YAML config + XDG paths + defaults
+  share/                     station snippet import/export helpers
   state/                     state.json — last-session persistence
   theme/                     color palettes
   tui/                       Bubble Tea model / update / view / keys / styles

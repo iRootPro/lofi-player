@@ -62,6 +62,8 @@ const (
 	modeAddStation
 	modeMixer
 	modeConfirmDelete
+	modeShareStation
+	modeImportStations
 )
 
 // Model is the root Bubble Tea model.
@@ -111,15 +113,25 @@ type Model struct {
 	showFullHelp  bool
 	mode          viewMode
 
-	// modePrev is the layout to restore when a modal (modeAddStation,
-	// modeMixer, modeConfirmDelete) closes. modeFull during everyday
-	// usage; modeMini if the modal was opened from compact mode.
+	// modePrev is the layout to restore when a modal closes. modeFull
+	// during everyday usage; modeMini if the modal was opened from
+	// compact mode.
 	modePrev viewMode
 	addForm  addStationForm
 
 	// pendingDeleteIdx points at the station awaiting user confirmation
 	// in modeConfirmDelete. -1 outside that mode.
 	pendingDeleteIdx int
+
+	// shareSnippet is the YAML block shown in the share modal for the
+	// currently selected station.
+	shareSnippet string
+
+	// importStations holds parsed stations awaiting confirmation in the
+	// import modal. importSkipped counts clipboard entries ignored because
+	// the same URL already exists in cfg.Stations.
+	importStations []config.Station
+	importSkipped  int
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel
@@ -214,18 +226,18 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	}
 
 	return Model{
-		cfg:            cfg,
-		player:         player,
-		theme:          t,
-		styles:         NewStyles(t),
-		keys:           DefaultKeyMap(),
-		cursor:         cursor,
-		playingIdx:     playingIdx,
-		playing:        playing,
-		loading:        loading,
-		volume:         volume,
-		spinner:        sp,
-		autoplayURL:    autoplayURL,
+		cfg:              cfg,
+		player:           player,
+		theme:            t,
+		styles:           NewStyles(t),
+		keys:             DefaultKeyMap(),
+		cursor:           cursor,
+		playingIdx:       playingIdx,
+		playing:          playing,
+		loading:          loading,
+		volume:           volume,
+		spinner:          sp,
+		autoplayURL:      autoplayURL,
 		mixer:            mixer,
 		mixerUI:          newMixerModel(mixer),
 		saveAmbient:      opts.SaveAmbient,

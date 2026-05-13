@@ -1,6 +1,10 @@
 package tui
 
-import "time"
+import (
+	"time"
+
+	"github.com/iRootPro/lofi-player/internal/config"
+)
 
 // Bridge messages between internal/audio events and the Bubble Tea
 // Update loop. The translator in commands.go maps each audio.Event into
@@ -59,6 +63,17 @@ type EOFMsg struct{}
 // clearToastMsg is delivered by a delayed tea.Tick to wipe an active
 // Toast after its lifetime expires.
 type clearToastMsg struct{}
+
+// shareCopiedMsg reports the outcome of copying a station snippet to the
+// system clipboard.
+type shareCopiedMsg struct{ Err error }
+
+// importClipboardMsg reports the outcome of reading and parsing a station
+// snippet from the system clipboard.
+type importClipboardMsg struct {
+	Stations []config.Station
+	Err      error
+}
 
 // pulseTickMsg toggles the live indicator's brightness for a soft
 // "alive" pulse while a station is actively playing.

@@ -13,7 +13,8 @@ theme: tokyo-night
 volume: 60
 
 # Internet-radio stations. Each station needs a display name and a stream URL.
-# In Phase 0 only the URL field is read (audio comes online in Phase 1).
+# Share/import uses the same shape, so snippets copied from friends can be
+# pasted under this key or imported with `lofi-player --import stations.yaml`.
 stations:
   - name: SomaFM Groove Salad
     url: https://ice1.somafm.com/groovesalad-256-mp3

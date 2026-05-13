@@ -87,6 +87,10 @@ func (m Model) View() string {
 		content = inner.viewMixer()
 	case modeConfirmDelete:
 		content = inner.viewConfirmDelete()
+	case modeShareStation:
+		content = inner.viewShareStation()
+	case modeImportStations:
+		content = inner.viewImportStations()
 	default:
 		content = inner.viewFull()
 	}
@@ -121,16 +125,103 @@ func (m Model) viewMixer() string {
 	return overlayModal(backdrop, card)
 }
 
+func (m Model) modalBackdrop() string {
+	if m.modePrev == modeMini {
+		return m.viewMini()
+	}
+	return m.viewFull()
+}
+
+func (m Model) viewShareStation() string {
+	backdrop := m.modalBackdrop()
+	name := "station"
+	if m.cursor >= 0 && m.cursor < len(m.cfg.Stations) {
+		name = m.cfg.Stations[m.cursor].Name
+	}
+
+	lines := strings.Split(strings.TrimRight(m.shareSnippet, "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = m.styles.HelpDesc.Render(line)
+	}
+	body := strings.Join(lines, "\n")
+	if body == "" {
+		body = m.styles.Hint.Render("nothing to share")
+	}
+
+	hint := m.styles.HelpKey.Render("enter") + " " +
+		m.styles.HelpDesc.Render("copy") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("esc") + " " +
+		m.styles.HelpDesc.Render("close")
+
+	inner := m.styles.SectionHeader.Render("─── share station ───") +
+		"\n\n" + m.styles.StationName.Render(name) +
+		"\n\n" + body
+	if m.toast != nil {
+		inner += "\n\n" + m.renderToast()
+	}
+	inner += "\n\n" + hint
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(1, 3).
+		Render(inner)
+	return overlayModal(backdrop, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card))
+}
+
+func (m Model) viewImportStations() string {
+	backdrop := m.modalBackdrop()
+	count := len(m.importStations)
+	plural := "station"
+	if count != 1 {
+		plural = "stations"
+	}
+	var preview strings.Builder
+	limit := count
+	if limit > 5 {
+		limit = 5
+	}
+	for i := 0; i < limit; i++ {
+		if i > 0 {
+			preview.WriteByte('\n')
+		}
+		preview.WriteString(m.styles.StationName.Render(m.importStations[i].Name))
+		preview.WriteString(m.styles.HelpDesc.Render("  "))
+		preview.WriteString(m.styles.Hint.Render(m.importStations[i].URL))
+	}
+	if count > limit {
+		preview.WriteByte('\n')
+		preview.WriteString(m.styles.Hint.Render(fmt.Sprintf("…and %d more", count-limit)))
+	}
+	if m.importSkipped > 0 {
+		preview.WriteByte('\n')
+		preview.WriteString(m.styles.Hint.Render(fmt.Sprintf("skipping %d duplicate(s)", m.importSkipped)))
+	}
+
+	hint := m.styles.HelpKey.Render("enter") + " " +
+		m.styles.HelpDesc.Render("import") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("esc") + " " +
+		m.styles.HelpDesc.Render("cancel")
+
+	inner := m.styles.SectionHeader.Render("─── import stations ───") +
+		"\n\n" + m.styles.HelpDesc.Render(fmt.Sprintf("import %d %s?", count, plural)) +
+		"\n\n" + preview.String() + "\n\n" + hint
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(1, 3).
+		Render(inner)
+	return overlayModal(backdrop, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card))
+}
+
 // viewConfirmDelete renders a small "delete <name>?" card centered in
 // the frame, on top of the prior layout so the user keeps visual
 // context for which row is being removed.
 func (m Model) viewConfirmDelete() string {
-	var backdrop string
-	if m.modePrev == modeMini {
-		backdrop = m.viewMini()
-	} else {
-		backdrop = m.viewFull()
-	}
+	backdrop := m.modalBackdrop()
 
 	name := "?"
 	if m.pendingDeleteIdx >= 0 && m.pendingDeleteIdx < len(m.cfg.Stations) {
@@ -161,12 +252,7 @@ func (m Model) viewConfirmDelete() string {
 // context (now-playing, station list) while typing.
 func (m Model) viewAddStation() string {
 	// Render the previous layout as the backdrop.
-	var backdrop string
-	if m.modePrev == modeMini {
-		backdrop = m.viewMini()
-	} else {
-		backdrop = m.viewFull()
-	}
+	backdrop := m.modalBackdrop()
 	form := m.addForm.view(m.width, m.styles, m.theme.Muted)
 	return overlayModal(backdrop, form)
 }
@@ -648,6 +734,7 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 		keyStyle.Render("space") + " " + m.styles.HelpDesc.Render("play/pause"),
 		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render("station"),
 		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
+		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render("share/import"),
 		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
 		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render("help"),
 	}

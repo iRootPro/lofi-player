@@ -18,6 +18,8 @@ type KeyMap struct {
 	AddStation    key.Binding
 	EditStation   key.Binding
 	DeleteStation key.Binding
+	ShareStation  key.Binding
+	ImportStation key.Binding
 	MixerOpen     key.Binding
 	StreamInfo    key.Binding
 	Help          key.Binding
@@ -69,6 +71,14 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("d"),
 			key.WithHelp("d", "delete"),
 		),
+		ShareStation: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "share"),
+		),
+		ImportStation: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "paste"),
+		),
 		MixerOpen: key.NewBinding(
 			key.WithKeys("x"),
 			key.WithHelp("x", "mixer"),
@@ -91,7 +101,7 @@ func DefaultKeyMap() KeyMap {
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.AddStation, k.EditStation, k.DeleteStation, k.MixerOpen},
+		{k.Up, k.Down, k.AddStation, k.EditStation, k.DeleteStation, k.ShareStation, k.ImportStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
 		{k.ThemeCycle, k.Mini, k.StreamInfo, k.Help, k.Quit},
 	}

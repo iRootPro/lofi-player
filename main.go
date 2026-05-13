@@ -6,14 +6,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/state"
 	"github.com/iRootPro/lofi-player/internal/tui"
 )
@@ -26,12 +29,18 @@ var version = "dev"
 
 func main() {
 	var (
-		statusline  bool
-		showVersion bool
+		statusline    bool
+		showVersion   bool
+		exportAll     bool
+		exportStation string
+		importPath    string
 	)
 	flag.BoolVar(&statusline, "statusline", false, "print one status-line snapshot to stdout and exit (no TUI)")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand)")
+	flag.BoolVar(&exportAll, "export-all", false, "print all stations as a shareable YAML snippet and exit")
+	flag.StringVar(&exportStation, "export-station", "", "print one station by name as a shareable YAML snippet and exit")
+	flag.StringVar(&importPath, "import", "", "import stations from a YAML snippet file, or '-' for stdin, and exit")
 	flag.Parse()
 
 	if showVersion {
@@ -41,6 +50,22 @@ func main() {
 
 	if statusline {
 		if err := runStatusline(); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if exportAll || exportStation != "" {
+		if err := runExport(exportAll, exportStation); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if importPath != "" {
+		if err := runImport(importPath); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
 			os.Exit(1)
 		}
@@ -135,6 +160,93 @@ func run() error {
 		}
 	}
 	return nil
+}
+
+func runExport(all bool, stationName string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	var snippet string
+	if all {
+		snippet, err = sharepkg.MarshalStations(cfg.Stations)
+	} else {
+		st, ok := findStationByName(cfg.Stations, stationName)
+		if !ok {
+			return fmt.Errorf("station %q not found", stationName)
+		}
+		snippet, err = sharepkg.MarshalStation(st)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Print(snippet)
+	return nil
+}
+
+func runImport(path string) error {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return err
+	}
+	stations, err := sharepkg.Parse(string(data))
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	newStations, skipped := newStationsOnly(cfg.Stations, stations)
+	if len(newStations) == 0 {
+		fmt.Fprintf(os.Stderr, "lofi-player: all %d station(s) already exist\n", skipped)
+		return nil
+	}
+	cfg.Stations = append(cfg.Stations, newStations...)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "lofi-player: imported %d station(s), skipped %d duplicate(s)\n", len(newStations), skipped)
+	return nil
+}
+
+func findStationByName(stations []config.Station, name string) (config.Station, bool) {
+	for _, st := range stations {
+		if st.Name == name {
+			return st, true
+		}
+	}
+	for _, st := range stations {
+		if strings.EqualFold(st.Name, name) {
+			return st, true
+		}
+	}
+	return config.Station{}, false
+}
+
+func newStationsOnly(existing, incoming []config.Station) ([]config.Station, int) {
+	seen := make(map[string]struct{}, len(existing)+len(incoming))
+	for _, st := range existing {
+		seen[st.URL] = struct{}{}
+	}
+	out := make([]config.Station, 0, len(incoming))
+	skipped := 0
+	for _, st := range incoming {
+		if _, ok := seen[st.URL]; ok {
+			skipped++
+			continue
+		}
+		seen[st.URL] = struct{}{}
+		out = append(out, st)
+	}
+	return out, skipped
 }
 
 // runStatusline produces a single colored line and exits. Designed for

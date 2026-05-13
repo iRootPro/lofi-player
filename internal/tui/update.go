@@ -11,6 +11,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -46,6 +47,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clockTickMsg:
 		m.nowTime = tick.At
 		return m, clockTick()
+	case clearToastMsg:
+		m.toast = nil
+		return m, nil
+	case shareCopiedMsg:
+		if tick.Err != nil {
+			// Keep the share modal open so the visible YAML remains available
+			// for manual copying when the host clipboard is unavailable.
+			m.toast = &Toast{Message: fmt.Sprintf("clipboard unavailable: %v", tick.Err), Kind: ToastError}
+			return m, clearToastAfter()
+		}
+		m.mode = m.modePrev
+		m.shareSnippet = ""
+		m.toast = &Toast{Message: "station snippet copied", Kind: ToastSuccess}
+		return m, clearToastAfter()
+	case importClipboardMsg:
+		if tick.Err != nil {
+			m.toast = &Toast{Message: fmt.Sprintf("import failed: %v", tick.Err), Kind: ToastError}
+			return m, clearToastAfter()
+		}
+		m.importStations, m.importSkipped = m.newStationsOnly(tick.Stations)
+		if len(m.importStations) == 0 {
+			m.toast = &Toast{Message: "all pasted stations already exist", Kind: ToastInfo}
+			return m, clearToastAfter()
+		}
+		m.modePrev = m.mode
+		m.mode = modeImportStations
+		return m, nil
 	}
 	// Modal states intercept input first so the form can capture text
 	// without the global keymap stealing characters like 'q'.
@@ -57,6 +85,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.mode == modeConfirmDelete {
 		return m.updateConfirmDelete(msg)
+	}
+	if m.mode == modeShareStation {
+		return m.updateShareStation(msg)
+	}
+	if m.mode == modeImportStations {
+		return m.updateImportStations(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -236,6 +270,23 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingDeleteIdx = m.cursor
 		return m, nil
 
+	case key.Matches(msg, m.keys.ShareStation):
+		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
+			return m, nil
+		}
+		snippet, err := sharepkg.MarshalStation(m.cfg.Stations[m.cursor])
+		if err != nil {
+			m.toast = &Toast{Message: fmt.Sprintf("share failed: %v", err), Kind: ToastError}
+			return m, clearToastAfter()
+		}
+		m.modePrev = m.mode
+		m.mode = modeShareStation
+		m.shareSnippet = snippet
+		return m, nil
+
+	case key.Matches(msg, m.keys.ImportStation):
+		return m, importClipboardCmd()
+
 	case key.Matches(msg, m.keys.MixerOpen):
 		m.modePrev = m.mode
 		m.mode = modeMixer
@@ -296,6 +347,43 @@ func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, clearToastAfter()
 }
 
+func (m Model) updateShareStation(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "enter":
+		return m, copyShareCmd(m.shareSnippet)
+	case "esc":
+		m.mode = m.modePrev
+		m.shareSnippet = ""
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m Model) updateImportStations(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "enter":
+		return m.commitImport()
+	case "esc", "n", "N":
+		m.mode = m.modePrev
+		m.importStations = nil
+		m.importSkipped = 0
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 // updateConfirmDelete handles the delete-confirmation modal. y/Y/enter
 // commits, n/N/esc cancels. Anything else is ignored so the user can't
 // accidentally dismiss it by stray keys.
@@ -315,6 +403,52 @@ func (m Model) updateConfirmDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m Model) commitImport() (tea.Model, tea.Cmd) {
+	count := len(m.importStations)
+	if count == 0 {
+		m.mode = m.modePrev
+		return m, nil
+	}
+	m.cfg.Stations = append(m.cfg.Stations, m.importStations...)
+	m.cursor = len(m.cfg.Stations) - 1
+	m.mode = m.modePrev
+	m.importStations = nil
+	m.importSkipped = 0
+
+	if err := config.Save(m.cfg); err != nil {
+		m.toast = &Toast{
+			Message: fmt.Sprintf("imported in memory but config save failed: %v", err),
+			Kind:    ToastError,
+		}
+		return m, clearToastAfter()
+	}
+
+	msg := fmt.Sprintf("imported %d station", count)
+	if count != 1 {
+		msg += "s"
+	}
+	m.toast = &Toast{Message: msg, Kind: ToastSuccess}
+	return m, clearToastAfter()
+}
+
+func (m Model) newStationsOnly(stations []config.Station) ([]config.Station, int) {
+	seen := make(map[string]struct{}, len(m.cfg.Stations)+len(stations))
+	for _, st := range m.cfg.Stations {
+		seen[st.URL] = struct{}{}
+	}
+	out := make([]config.Station, 0, len(stations))
+	skipped := 0
+	for _, st := range stations {
+		if _, ok := seen[st.URL]; ok {
+			skipped++
+			continue
+		}
+		seen[st.URL] = struct{}{}
+		out = append(out, st)
+	}
+	return out, skipped
 }
 
 // commitDelete removes the pending station from cfg.Stations,
