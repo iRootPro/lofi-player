@@ -7,6 +7,16 @@ package theme
 
 import "github.com/charmbracelet/lipgloss"
 
+// Info describes a built-in theme for pickers, help text, and docs.
+type Info struct {
+	// Name is the canonical identifier used in config/state files.
+	Name string
+	// DisplayName is the human-friendly label shown in the TUI.
+	DisplayName string
+	// Description is a short mood note that helps users choose a palette.
+	Description string
+}
+
 // Theme is a flat palette of semantic color roles.
 //
 // Roles are intentionally semantic (Primary, Accent, Success) rather than
@@ -124,14 +134,32 @@ func Lookup(name string) (Theme, bool) {
 
 // Names returns all registered theme names in stable order — Tokyo Night
 // first (the default), then the rest alphabetically. Callers use this to
-// drive the t-cycle binding in the TUI.
+// drive the theme picker in the TUI.
 func Names() []string {
-	return []string{
-		"tokyo-night",
-		"catppuccin-mocha",
-		"gruvbox-dark",
-		"rose-pine",
+	out := make([]string, len(infos))
+	for i, info := range infos {
+		out[i] = info.Name
 	}
+	return out
+}
+
+// InfoFor returns the metadata for a registered theme. Unknown names fall
+// back to Tokyo Night metadata and false, mirroring Lookup.
+func InfoFor(name string) (Info, bool) {
+	for _, info := range infos {
+		if info.Name == name {
+			return info, true
+		}
+	}
+	return infos[0], false
+}
+
+// Infos returns all registered theme metadata in the same stable order as
+// Names. The returned slice is a copy so callers cannot mutate the registry.
+func Infos() []Info {
+	out := make([]Info, len(infos))
+	copy(out, infos)
+	return out
 }
 
 // Next returns the theme name that follows current in the cycle order
@@ -145,6 +173,14 @@ func Next(current string) string {
 		}
 	}
 	return names[0]
+}
+
+// infos is the canonical order used by Names and the TUI picker.
+var infos = []Info{
+	{Name: "tokyo-night", DisplayName: "Tokyo Night", Description: "cool neon on deep blue"},
+	{Name: "catppuccin-mocha", DisplayName: "Catppuccin Mocha", Description: "soft pastels on warm charcoal"},
+	{Name: "gruvbox-dark", DisplayName: "Gruvbox Dark", Description: "earthy contrast with vintage warmth"},
+	{Name: "rose-pine", DisplayName: "Rose Pine", Description: "muted mauve, calm and low-glare"},
 }
 
 // registry maps theme names to constructors. Phase 0 shipped only Tokyo

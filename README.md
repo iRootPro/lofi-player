@@ -35,7 +35,7 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
   thunder), CC0 sources, embedded in the binary. Each channel has its
   own volume; mixes layer underneath the main station.
 - **Four themes** — Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Rose
-  Pine. Cycle with `t`.
+  Pine. Open the theme picker with `t`.
 - **Mini mode** — collapses to ~6 lines for a tmux pane (`m`).
 - **macOS media key** — the hardware Play/Pause key toggles the
   current station while `lofi-player` is running.
@@ -139,7 +139,7 @@ Quit with `q` or `ctrl+c`.
 | macOS `Play/Pause` | pause / resume the current station |
 | `+` / `=` | volume up (5%) |
 | `-` / `_` | volume down (5%) |
-| `t` | cycle theme |
+| `t` | open theme picker |
 | `m` | toggle mini mode |
 | `a` | add station (modal) |
 | `e` | edit selected station (modal) |
@@ -254,8 +254,9 @@ Four palettes ship in the binary:
 - **Gruvbox Dark** — earthy, high-contrast.
 - **Rose Pine** — muted, soft mauve.
 
-Cycle live with `t`. The choice is persisted to state and reapplied on
-the next launch.
+Open the live picker with `t`, preview palettes with `↑/↓` or `j/k`,
+then press `enter` to select or `esc` to cancel. The choice is persisted
+to state and reapplied on the next launch.
 
 ## Mini mode and tmux
 

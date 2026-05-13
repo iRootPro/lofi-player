@@ -92,6 +92,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.mode == modeImportStations {
 		return m.updateImportStations(msg)
 	}
+	if m.mode == modeThemePicker {
+		return m.updateThemePicker(msg)
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -229,13 +232,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, setVolumeCmd(m.player, m.volume)
 
 	case key.Matches(msg, m.keys.ThemeCycle):
-		next, _ := theme.Lookup(theme.Next(m.theme.Name))
-		m.theme = next
-		m.styles = NewStyles(next)
-		// Spinner color is baked at construction; refresh it so the
-		// spinner stays in sync with the active theme's Muted tone.
-		m.spinner.Style = lipgloss.NewStyle().Foreground(next.Muted)
-		return m, nil
+		return m.openThemePicker(), nil
 
 	case key.Matches(msg, m.keys.Mini):
 		if m.mode == modeFull {
@@ -384,6 +381,55 @@ func (m Model) updateImportStations(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) openThemePicker() Model {
+	m.modePrev = m.mode
+	m.mode = modeThemePicker
+	m.themeBeforePicker = m.theme.Name
+	m.themeCursor = m.currentThemeIndex()
+	return m
+}
+
+func (m Model) updateThemePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	names := theme.Names()
+	if len(names) == 0 {
+		m.mode = m.modePrev
+		return m, nil
+	}
+
+	move := func(delta int) {
+		m.themeCursor = (m.themeCursor + delta + len(names)) % len(names)
+		m = m.applyTheme(names[m.themeCursor])
+	}
+
+	switch km.String() {
+	case "up", "k":
+		move(-1)
+		return m, nil
+	case "down", "j":
+		move(1)
+		return m, nil
+	case "enter":
+		m.mode = m.modePrev
+		m.themeBeforePicker = ""
+		return m, nil
+	case "esc":
+		if m.themeBeforePicker != "" {
+			m = m.applyTheme(m.themeBeforePicker)
+		}
+		m.mode = m.modePrev
+		m.themeBeforePicker = ""
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 // updateConfirmDelete handles the delete-confirmation modal. y/Y/enter
 // commits, n/N/esc cancels. Anything else is ignored so the user can't
 // accidentally dismiss it by stray keys.
@@ -449,6 +495,25 @@ func (m Model) newStationsOnly(stations []config.Station) ([]config.Station, int
 		out = append(out, st)
 	}
 	return out, skipped
+}
+
+func (m Model) currentThemeIndex() int {
+	for i, name := range theme.Names() {
+		if name == m.theme.Name {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m Model) applyTheme(name string) Model {
+	next, _ := theme.Lookup(name)
+	m.theme = next
+	m.styles = NewStyles(next)
+	// Spinner color is baked at construction; refresh it so the
+	// spinner stays in sync with the active theme's Muted tone.
+	m.spinner.Style = lipgloss.NewStyle().Foreground(next.Muted)
+	return m
 }
 
 // commitDelete removes the pending station from cfg.Stations,

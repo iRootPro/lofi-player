@@ -53,7 +53,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		ThemeCycle: key.NewBinding(
 			key.WithKeys("t"),
-			key.WithHelp("t", "theme"),
+			key.WithHelp("t", "themes"),
 		),
 		Mini: key.NewBinding(
 			key.WithKeys("m"),

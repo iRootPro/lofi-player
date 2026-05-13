@@ -44,6 +44,8 @@ func send(t *testing.T, m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyDown}
 		case "esc":
 			msg = tea.KeyMsg{Type: tea.KeyEsc}
+		case "enter":
+			msg = tea.KeyMsg{Type: tea.KeyEnter}
 		default:
 			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 		}
@@ -172,6 +174,53 @@ func TestUpdate_HelpToggle(t *testing.T) {
 	m = send(t, m, "?")
 	if m.showFullHelp {
 		t.Error("? did not disable full help")
+	}
+}
+
+func TestThemePickerPreviewCancelAndConfirm(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "t")
+	if m.mode != modeThemePicker {
+		t.Fatalf("mode after t: got %v, want modeThemePicker", m.mode)
+	}
+	if m.themeBeforePicker != "tokyo-night" {
+		t.Fatalf("themeBeforePicker = %q, want tokyo-night", m.themeBeforePicker)
+	}
+
+	m = send(t, m, "j")
+	if m.theme.Name != "catppuccin-mocha" {
+		t.Fatalf("theme after preview down = %q, want catppuccin-mocha", m.theme.Name)
+	}
+	m = send(t, m, "esc")
+	if m.mode != modeFull {
+		t.Fatalf("mode after esc: got %v, want modeFull", m.mode)
+	}
+	if m.theme.Name != "tokyo-night" {
+		t.Fatalf("theme after cancel = %q, want tokyo-night", m.theme.Name)
+	}
+
+	m = send(t, m, "t", "j", "enter")
+	if m.mode != modeFull {
+		t.Fatalf("mode after enter: got %v, want modeFull", m.mode)
+	}
+	if m.theme.Name != "catppuccin-mocha" {
+		t.Fatalf("theme after confirm = %q, want catppuccin-mocha", m.theme.Name)
+	}
+}
+
+func TestThemePickerViewAndTopChip(t *testing.T) {
+	m := fixture()
+	out := m.View()
+	if !strings.Contains(out, "Tokyo Night") {
+		t.Fatalf("View missing active theme chip; got:\n%s", out)
+	}
+
+	m = send(t, m, "t")
+	out = m.View()
+	for _, want := range []string{"themes", "Tokyo Night", "Catppuccin Mocha", "Gruvbox Dark", "Rose Pine", "enter", "esc"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("theme picker missing %q; got:\n%s", want, out)
+		}
 	}
 }
 

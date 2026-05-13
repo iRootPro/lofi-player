@@ -9,6 +9,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
 const (
@@ -91,12 +92,14 @@ func (m Model) View() string {
 		content = inner.viewShareStation()
 	case modeImportStations:
 		content = inner.viewImportStations()
+	case modeThemePicker:
+		content = inner.viewThemePicker()
 	default:
 		content = inner.viewFull()
 	}
 
 	title := iconLogo + " lofi.player"
-	rightLabel := inner.renderVolume()
+	rightLabel := inner.renderTopRight(frameWidth)
 	bottomLabel := inner.renderBottomHelp(frameWidth)
 
 	framed := renderFrame(
@@ -208,6 +211,65 @@ func (m Model) viewImportStations() string {
 	inner := m.styles.SectionHeader.Render("─── import stations ───") +
 		"\n\n" + m.styles.HelpDesc.Render(fmt.Sprintf("import %d %s?", count, plural)) +
 		"\n\n" + preview.String() + "\n\n" + hint
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(1, 3).
+		Render(inner)
+	return overlayModal(backdrop, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card))
+}
+
+func (m Model) viewThemePicker() string {
+	backdrop := m.modalBackdrop()
+	infos := theme.Infos()
+	if len(infos) == 0 {
+		return backdrop
+	}
+
+	var rows strings.Builder
+	for i, info := range infos {
+		if i > 0 {
+			rows.WriteByte('\n')
+		}
+
+		cursor := "  "
+		nameStyle := m.styles.StationItem
+		descStyle := m.styles.Hint
+		if i == m.themeCursor {
+			cursor = m.styles.Cursor.Render("›") + " "
+			nameStyle = m.styles.Cursor
+			descStyle = m.styles.HelpDesc
+		}
+
+		mark := " "
+		if info.Name == m.theme.Name {
+			mark = m.styles.StatusLive.Render("●")
+		}
+
+		rows.WriteString(cursor)
+		rows.WriteString(mark)
+		rows.WriteString(" ")
+		rows.WriteString(themeSwatch(info.Name))
+		rows.WriteString("  ")
+		rows.WriteString(nameStyle.Render(fmt.Sprintf("%-18s", info.DisplayName)))
+		rows.WriteString(m.styles.Hint.Render(info.Name))
+		rows.WriteString("\n")
+		rows.WriteString("    ")
+		rows.WriteString(descStyle.Render(info.Description))
+	}
+
+	hint := m.styles.HelpKey.Render("↑↓/jk") + " " +
+		m.styles.HelpDesc.Render("preview") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("enter") + " " +
+		m.styles.HelpDesc.Render("select") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("esc") + " " +
+		m.styles.HelpDesc.Render("cancel")
+
+	inner := m.styles.SectionHeader.Render("─── themes ───") +
+		"\n\n" + rows.String() + "\n\n" + hint
 
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -726,6 +788,34 @@ func (m Model) renderVolume() string {
 		m.styles.VolPercent.Render(fmt.Sprintf("%d%%", v))
 }
 
+func (m Model) renderTopRight(frameWidth int) string {
+	volume := m.renderVolume()
+	themeChip := m.renderThemeChip()
+	combined := themeChip + m.styles.HelpSep.Render(" · ") + volume
+	// Keep narrow terminals calm; renderFrame can draw with a zero filler,
+	// but a too-wide right label makes the title bar feel crowded.
+	if lipgloss.Width(combined) > frameWidth-28 {
+		return volume
+	}
+	return combined
+}
+
+func (m Model) renderThemeChip() string {
+	info, _ := theme.InfoFor(m.theme.Name)
+	return lipgloss.NewStyle().Foreground(m.theme.Primary).Render("◆") + " " +
+		m.styles.HelpDesc.Render(info.DisplayName)
+}
+
+func themeSwatch(name string) string {
+	t, _ := theme.Lookup(name)
+	cells := []lipgloss.Color{t.Primary, t.Secondary, t.Accent, t.Success}
+	out := ""
+	for _, c := range cells {
+		out += lipgloss.NewStyle().Foreground(c).Render("●")
+	}
+	return out
+}
+
 func (m Model) renderBottomHelp(frameWidth int) string {
 	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
 
@@ -736,6 +826,7 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
 		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render("share/import"),
 		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
+		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render("themes"),
 		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render("help"),
 	}
 	sep := m.styles.HelpSep.Render("  ·  ")

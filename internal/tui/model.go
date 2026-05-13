@@ -64,6 +64,7 @@ const (
 	modeConfirmDelete
 	modeShareStation
 	modeImportStations
+	modeThemePicker
 )
 
 // Model is the root Bubble Tea model.
@@ -132,6 +133,12 @@ type Model struct {
 	// the same URL already exists in cfg.Stations.
 	importStations []config.Station
 	importSkipped  int
+
+	// themeCursor is the highlighted row in the theme picker. The picker
+	// previews themes live while moving; themeBeforePicker is restored on
+	// Esc so browsing is non-destructive until Enter confirms.
+	themeCursor       int
+	themeBeforePicker string
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel
