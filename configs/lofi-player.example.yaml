@@ -5,8 +5,9 @@
 #
 # It is created with these defaults on first run if it doesn't exist.
 
-# Active color theme. Phase 0 only ships tokyo-night;
-# more themes (catppuccin-mocha, gruvbox-dark, rose-pine) arrive in Phase 2.
+# Active color theme. Built-ins:
+# tokyo-night, catppuccin-mocha, gruvbox-dark, rose-pine,
+# catppuccin-latte, rose-pine-dawn, solarized-light, paper.
 theme: tokyo-night
 
 # Initial playback volume, 0–100.

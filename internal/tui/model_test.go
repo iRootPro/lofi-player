@@ -9,6 +9,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
 // fixture returns a Model wired up with a real config and a sized window,
@@ -217,9 +218,16 @@ func TestThemePickerViewAndTopChip(t *testing.T) {
 
 	m = send(t, m, "t")
 	out = m.View()
-	for _, want := range []string{"themes", "Tokyo Night", "Catppuccin Mocha", "Gruvbox Dark", "Rose Pine", "enter", "esc"} {
+	for _, want := range []string{"themes", "enter", "esc"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("theme picker missing %q; got:\n%s", want, out)
+		}
+	}
+	for _, info := range theme.Infos() {
+		for _, want := range []string{info.DisplayName, info.Name} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("theme picker missing %q; got:\n%s", want, out)
+			}
 		}
 	}
 }

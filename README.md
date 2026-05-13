@@ -34,8 +34,8 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 - **Ambient mixer** — five looped beds (rain, fire, cafe, white noise,
   thunder), CC0 sources, embedded in the binary. Each channel has its
   own volume; mixes layer underneath the main station.
-- **Four themes** — Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Rose
-  Pine. Open the theme picker with `t`.
+- **Eight themes** — dark classics plus light palettes for bright rooms.
+  Open the theme picker with `t`.
 - **Mini mode** — collapses to ~6 lines for a tmux pane (`m`).
 - **macOS media key** — the hardware Play/Pause key toggles the
   current station while `lofi-player` is running.
@@ -224,7 +224,7 @@ on first run with sensible defaults; a documented example sits at
 [`configs/lofi-player.example.yaml`](configs/lofi-player.example.yaml).
 
 ```yaml
-theme: tokyo-night        # tokyo-night | catppuccin-mocha | gruvbox-dark | rose-pine
+theme: tokyo-night        # see Themes below for all built-in theme ids
 volume: 60                # initial volume, 0–100
 
 stations:
@@ -247,12 +247,16 @@ fails.
 
 ## Themes
 
-Four palettes ship in the binary:
+Eight palettes ship in the binary:
 
-- **Tokyo Night** (default) — cool, neon-on-deep-blue.
-- **Catppuccin Mocha** — pastel-on-warm-charcoal.
-- **Gruvbox Dark** — earthy, high-contrast.
-- **Rose Pine** — muted, soft mauve.
+- **Tokyo Night** (default, `tokyo-night`) — cool, neon-on-deep-blue.
+- **Catppuccin Mocha** (`catppuccin-mocha`) — pastel-on-warm-charcoal.
+- **Gruvbox Dark** (`gruvbox-dark`) — earthy, high-contrast.
+- **Rose Pine** (`rose-pine`) — muted, soft mauve.
+- **Catppuccin Latte** (`catppuccin-latte`) — airy pastel light theme.
+- **Rose Pine Dawn** (`rose-pine-dawn`) — warm sunrise paper with soft mauve.
+- **Solarized Light** (`solarized-light`) — classic low-contrast terminal daylight.
+- **Paper** (`paper`) — warm ink on cream for bright rooms.
 
 Open the live picker with `t`, preview palettes with `↑/↓` or `j/k`,
 then press `enter` to select or `esc` to cancel. The choice is persisted

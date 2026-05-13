@@ -13,6 +13,10 @@ func TestLookup(t *testing.T) {
 		{"catppuccin-mocha", "catppuccin-mocha", "catppuccin-mocha", true},
 		{"gruvbox-dark", "gruvbox-dark", "gruvbox-dark", true},
 		{"rose-pine", "rose-pine", "rose-pine", true},
+		{"catppuccin-latte", "catppuccin-latte", "catppuccin-latte", true},
+		{"rose-pine-dawn", "rose-pine-dawn", "rose-pine-dawn", true},
+		{"solarized-light", "solarized-light", "solarized-light", true},
+		{"paper", "paper", "paper", true},
 
 		{"empty string falls back to default", "", "tokyo-night", false},
 		{"unknown name falls back", "monokai", "tokyo-night", false},
