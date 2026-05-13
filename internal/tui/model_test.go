@@ -187,6 +187,18 @@ func TestUpdate_QuitReturnsTeaQuit(t *testing.T) {
 	}
 }
 
+func TestPlaybackStartedWhileIdleDoesNotMarkPlaying(t *testing.T) {
+	m := fixture()
+	if m.playingIdx != -1 {
+		t.Fatalf("fixture playingIdx = %d, want -1", m.playingIdx)
+	}
+	updated, _ := m.Update(PlaybackStartedMsg{})
+	m = updated.(Model)
+	if m.playing || m.loading || !m.playStartedAt.IsZero() {
+		t.Fatalf("idle PlaybackStarted mutated playback state: playing=%v loading=%v started=%v", m.playing, m.loading, m.playStartedAt)
+	}
+}
+
 func TestView_ShowsPlayingMarker(t *testing.T) {
 	m := fixture()
 	m = send(t, m, "space") // dispatch play; model goes into loading state

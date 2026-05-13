@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -197,6 +200,41 @@ func TestMPVArgsDisableUserConfig(t *testing.T) {
 	}
 	if !hasArg(ambientArgs, "/tmp/rain.opus") {
 		t.Fatalf("ambient mpv args %v do not include file path", ambientArgs)
+	}
+}
+
+func TestDarwinMPVArgsWireMediaKeys(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("media-key args are macOS-only")
+	}
+	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock")
+	if !hasArg(mainArgs, "--input-media-keys=yes") {
+		t.Fatalf("main mpv args %v do not enable media keys", mainArgs)
+	}
+	if !hasArg(mainArgs, "--input-conf=/tmp/input.conf") {
+		t.Fatalf("main mpv args %v do not include media-key input.conf", mainArgs)
+	}
+
+	ambientArgs := ambientMPVArgs("/tmp/lofi-ambient-test.sock", "/tmp/rain.opus")
+	if !hasArg(ambientArgs, "--input-media-keys=no") {
+		t.Fatalf("ambient mpv args %v do not disable media keys", ambientArgs)
+	}
+}
+
+func TestWriteMainInputConf(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("media-key input.conf is macOS-only")
+	}
+	socketPath := filepath.Join(t.TempDir(), "mpv.sock")
+	if err := writeMainInputConf(socketPath); err != nil {
+		t.Fatalf("writeMainInputConf: %v", err)
+	}
+	data, err := os.ReadFile(mainInputConfPath(socketPath))
+	if err != nil {
+		t.Fatalf("read input.conf: %v", err)
+	}
+	if got := string(data); got != mainInputConf {
+		t.Fatalf("input.conf = %q, want %q", got, mainInputConf)
 	}
 }
 

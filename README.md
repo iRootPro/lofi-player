@@ -37,6 +37,8 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 - **Four themes** — Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Rose
   Pine. Cycle with `t`.
 - **Mini mode** — collapses to ~6 lines for a tmux pane (`m`).
+- **macOS media key** — the hardware Play/Pause key toggles the
+  current station while `lofi-player` is running.
 - **Tmux statusline** — `lofi-player --statusline` prints one colored
   line for `status-right`.
 - **State persistence** — last station, volume, theme, ambient levels
@@ -134,6 +136,7 @@ Quit with `q` or `ctrl+c`.
 | `j` / `↓` | move cursor down |
 | `k` / `↑` | move cursor up |
 | `space` | play / pause selected station |
+| macOS `Play/Pause` | pause / resume the current station |
 | `+` / `=` | volume up (5%) |
 | `-` / `_` | volume down (5%) |
 | `t` | cycle theme |
@@ -145,6 +148,9 @@ Quit with `q` or `ctrl+c`.
 | `i` | toggle stream-info row |
 | `?` | toggle full help card |
 | `q` / `ctrl+c` | quit |
+
+The macOS hardware Play/Pause key controls the station already loaded
+in mpv; if no station has been started yet, it is ignored.
 
 ### Ambient mixer (after `x`)
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -124,18 +125,27 @@ type Player struct {
 	lastCacheSec float64
 }
 
+const mainInputConf = "PAUSE cycle pause\n"
+
 func mainMPVArgs(socketPath string) []string {
-	return []string{
+	args := []string{
 		"--no-config",
 		"--idle=yes",
 		"--no-video",
 		"--no-terminal",
 		"--input-ipc-server=" + socketPath,
 	}
+	if runtime.GOOS == "darwin" {
+		args = append(args,
+			"--input-media-keys=yes",
+			"--input-conf="+mainInputConfPath(socketPath),
+		)
+	}
+	return args
 }
 
 func ambientMPVArgs(socketPath, filePath string) []string {
-	return []string{
+	args := []string{
 		"--no-config",
 		"--idle=no",
 		"--no-video",
@@ -144,8 +154,27 @@ func ambientMPVArgs(socketPath, filePath string) []string {
 		"--volume=0",
 		"--pause=yes",
 		"--input-ipc-server=" + socketPath,
-		filePath,
 	}
+	if runtime.GOOS == "darwin" {
+		args = append(args, "--input-media-keys=no")
+	}
+	args = append(args, filePath)
+	return args
+}
+
+func mainInputConfPath(socketPath string) string {
+	return filepath.Join(filepath.Dir(socketPath), "input.conf")
+}
+
+func writeMainInputConf(socketPath string) error {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	path := mainInputConfPath(socketPath)
+	if err := os.WriteFile(path, []byte(mainInputConf), 0o644); err != nil {
+		return fmt.Errorf("write mpv input.conf: %w", err)
+	}
+	return nil
 }
 
 // NewPlayer spawns mpv in idle mode and establishes a JSON-IPC connection
@@ -172,6 +201,10 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 		}
 	}
 	socketPath := filepath.Join(socketDir, "mpv.sock")
+	if err := writeMainInputConf(socketPath); err != nil {
+		os.RemoveAll(socketDir)
+		return nil, err
+	}
 
 	var stderr bytes.Buffer
 	cmd := exec.Command(mpvPath, mainMPVArgs(socketPath)...)

@@ -73,6 +73,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.player)
 
 	case PlaybackStartedMsg:
+		// mpv can emit pause=false while idle (for example if a hardware
+		// media key is pressed before any station has been loaded). Do not
+		// let that phantom event make the TUI claim something is playing.
+		if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+			m.playing = false
+			m.loading = false
+			return m, waitForEvent(m.player)
+		}
 		m.playing = true
 		m.loading = false
 		// First start after a fresh Play call: anchor the uptime
