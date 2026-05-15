@@ -156,6 +156,13 @@ type Model struct {
 	// cacheSeconds is how much audio mpv has buffered ahead. Drives
 	// the buffer-health indicator under the now-playing card.
 	cacheSeconds float64
+	// bufferingStalled mirrors mpv's paused-for-cache state. When it stays
+	// true after playback has already started, a watchdog reloads the live
+	// stream so laptop sleep/network drops recover without station hopping.
+	bufferingStalled bool
+	// reconnectSeq invalidates stale reconnect timers when the stall clears,
+	// playback is paused, or a different station is selected.
+	reconnectSeq int
 	// playStartedAt is when the current session started (i.e. last
 	// successful Play call). Drives the "listening 1h 23m" uptime
 	// label. Zero when nothing is playing.

@@ -89,6 +89,8 @@ func waitForEvent(p *audio.Player) tea.Cmd {
 			}
 		case audio.CacheStateChanged:
 			return CacheStateChangedMsg{Seconds: e.Seconds}
+		case audio.BufferingChanged:
+			return BufferingChangedMsg{Stalled: e.Stalled}
 		}
 		return nil
 	}
@@ -165,5 +167,15 @@ const clockInterval = time.Second
 func clockTick() tea.Cmd {
 	return tea.Tick(clockInterval, func(t time.Time) tea.Msg {
 		return clockTickMsg{At: t}
+	})
+}
+
+// streamReconnectDelay is long enough to avoid flapping on brief network
+// hiccups, but short enough to recover quickly after laptop sleep.
+const streamReconnectDelay = 8 * time.Second
+
+func reconnectStreamAfter(seq int) tea.Cmd {
+	return tea.Tick(streamReconnectDelay, func(time.Time) tea.Msg {
+		return reconnectStreamMsg{seq: seq}
 	})
 }

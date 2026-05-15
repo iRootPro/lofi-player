@@ -47,6 +47,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clockTickMsg:
 		m.nowTime = tick.At
 		return m, clockTick()
+	case reconnectStreamMsg:
+		if tick.seq != m.reconnectSeq || !m.bufferingStalled || !m.playing || m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+			return m, nil
+		}
+		m.loading = true
+		m.currentTrack = Track{}
+		m.streamInfo = audio.StreamInfoChanged{}
+		m.cacheSeconds = 0
+		m.playStartedAt = time.Time{}
+		m.toast = &Toast{Message: "reconnecting stream…", Kind: ToastInfo}
+		return m, tea.Batch(playCmd(m.player, m.cfg.Stations[m.playingIdx].URL), clearToastAfter())
 	case clearToastMsg:
 		m.toast = nil
 		return m, nil
@@ -116,10 +127,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
 			m.playing = false
 			m.loading = false
+			m.bufferingStalled = false
+			m.reconnectSeq++
 			return m, waitForEvent(m.player)
 		}
 		m.playing = true
 		m.loading = false
+		m.bufferingStalled = false
+		m.reconnectSeq++
 		// First start after a fresh Play call: anchor the uptime
 		// counter. Resume after pause keeps the previous anchor so
 		// "listening 1h 23m" doesn't reset every time the user toggles.
@@ -131,6 +146,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PlaybackPausedMsg:
 		m.playing = false
 		m.loading = false
+		m.bufferingStalled = false
+		m.reconnectSeq++
 		return m, waitForEvent(m.player)
 
 	case PlaybackErrorMsg:
@@ -141,6 +158,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
+		m.bufferingStalled = false
+		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
 		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
@@ -151,6 +170,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
+		m.bufferingStalled = false
+		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
 		return m, waitForEvent(m.player)
 
@@ -165,6 +186,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CacheStateChangedMsg:
 		m.cacheSeconds = msg.Seconds
+		return m, waitForEvent(m.player)
+
+	case BufferingChangedMsg:
+		m.bufferingStalled = msg.Stalled
+		if !msg.Stalled {
+			m.reconnectSeq++
+			return m, waitForEvent(m.player)
+		}
+		// paused-for-cache also happens during initial buffering. Only arm
+		// the self-heal watchdog after a station was already playing; slow
+		// startup should keep buffering instead of reload-looping.
+		if m.playing && !m.loading && m.playingIdx >= 0 && m.playingIdx < len(m.cfg.Stations) {
+			m.reconnectSeq++
+			seq := m.reconnectSeq
+			m.toast = &Toast{Message: "stream stalled — reconnecting if it does not recover", Kind: ToastInfo}
+			return m, tea.Batch(waitForEvent(m.player), reconnectStreamAfter(seq), clearToastAfter())
+		}
 		return m, waitForEvent(m.player)
 
 	case CommandFailedMsg:
@@ -551,6 +589,8 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
+		m.bufferingStalled = false
+		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
 		if m.player != nil {
 			cmd = pauseCmd(m.player)
@@ -592,12 +632,29 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 		return m, clearToastAfter()
 	}
 	if m.cursor == m.playingIdx {
-		// Toggle pause/resume on the currently-playing station.
+		// Toggle pause/resume on the currently-playing station. Direct live
+		// streams are reloaded on resume instead of merely unpaused: after a
+		// laptop sleep mpv can be left with a dead HTTP connection, and
+		// set pause=false will not reconnect it. YouTube keeps true resume
+		// semantics because those URLs are finite media, not live radio.
 		if m.playing {
 			m.playing = false
+			m.loading = false
+			m.bufferingStalled = false
+			m.reconnectSeq++
 			return m, pauseCmd(m.player)
 		}
 		m.playing = true
+		m.bufferingStalled = false
+		m.reconnectSeq++
+		if !m.cfg.Stations[m.cursor].IsYouTube() {
+			m.loading = true
+			m.currentTrack = Track{}
+			m.streamInfo = audio.StreamInfoChanged{}
+			m.cacheSeconds = 0
+			m.playStartedAt = time.Time{}
+			return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
+		}
 		return m, resumeCmd(m.player)
 	}
 	// Switching to a different station — replace playback. Mark the
@@ -609,6 +666,8 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.currentTrack = Track{}
 	m.streamInfo = audio.StreamInfoChanged{}
 	m.cacheSeconds = 0
+	m.bufferingStalled = false
+	m.reconnectSeq++
 	m.playStartedAt = time.Time{}
 	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
 }

@@ -33,6 +33,16 @@ type CacheStateChangedMsg struct {
 	Seconds float64
 }
 
+// BufferingChangedMsg reports that mpv is internally paused waiting for
+// cache/network data. If it stays true, the UI can reload the live stream.
+type BufferingChangedMsg struct {
+	Stalled bool
+}
+
+// reconnectStreamMsg is fired by a delayed watchdog after a sustained
+// buffering stall. seq lets the model ignore stale timers.
+type reconnectStreamMsg struct{ seq int }
+
 // PlaybackStartedMsg fires when mpv unpauses.
 type PlaybackStartedMsg struct{}
 

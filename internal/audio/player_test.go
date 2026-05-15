@@ -155,6 +155,22 @@ func TestTranslateOne_PlaybackRestart(t *testing.T) {
 	}
 }
 
+func TestTranslateOne_PausedForCache(t *testing.T) {
+	p := &Player{}
+	e := p.translateOne(ipcEvent{
+		Event: "property-change",
+		Name:  "paused-for-cache",
+		Data:  json.RawMessage(`true`),
+	})
+	bc, ok := e.(BufferingChanged)
+	if !ok {
+		t.Fatalf("paused-for-cache: got %T, want BufferingChanged", e)
+	}
+	if !bc.Stalled {
+		t.Fatal("paused-for-cache true produced Stalled=false")
+	}
+}
+
 func TestTranslateOne_UnknownEventDropped(t *testing.T) {
 	p := &Player{}
 	if e := p.translateOne(ipcEvent{Event: "property-change", Name: "idle-active", Data: json.RawMessage("true")}); e != nil {

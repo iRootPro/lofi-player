@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -253,6 +254,29 @@ func TestPlaybackStartedWhileIdleDoesNotMarkPlaying(t *testing.T) {
 	m = updated.(Model)
 	if m.playing || m.loading || !m.playStartedAt.IsZero() {
 		t.Fatalf("idle PlaybackStarted mutated playback state: playing=%v loading=%v started=%v", m.playing, m.loading, m.playStartedAt)
+	}
+}
+
+func TestBufferingStallReconnectsActiveStream(t *testing.T) {
+	m := fixture()
+	m.playingIdx = 0
+	m.playing = true
+	m.loading = false
+
+	updated, cmd := m.Update(BufferingChangedMsg{Stalled: true})
+	m = updated.(Model)
+	if !m.bufferingStalled || m.reconnectSeq == 0 || cmd == nil {
+		t.Fatalf("stall did not arm reconnect: stalled=%v seq=%d cmdNil=%v", m.bufferingStalled, m.reconnectSeq, cmd == nil)
+	}
+
+	m.currentTrack = Track{Title: "old"}
+	m.streamInfo = audio.StreamInfoChanged{Bitrate: 128000}
+	m.cacheSeconds = 3
+	m.playStartedAt = time.Now()
+	updated, cmd = m.Update(reconnectStreamMsg{seq: m.reconnectSeq})
+	m = updated.(Model)
+	if !m.loading || m.currentTrack != (Track{}) || m.streamInfo != (audio.StreamInfoChanged{}) || m.cacheSeconds != 0 || !m.playStartedAt.IsZero() || cmd == nil {
+		t.Fatalf("reconnect did not reset playback state: loading=%v track=%+v info=%+v cache=%v started=%v cmdNil=%v", m.loading, m.currentTrack, m.streamInfo, m.cacheSeconds, m.playStartedAt, cmd == nil)
 	}
 }
 

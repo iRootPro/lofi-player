@@ -19,15 +19,16 @@ import (
 // internal — mpv echoes them back on each property-change event so the
 // translator can route by id without parsing names.
 const (
-	propIDPause       = 1
-	propIDVolume      = 2
-	propIDMetadata    = 3
-	propIDMediaTitle  = 4
-	propIDIdleActive  = 5
-	propIDAudioBitr   = 6
-	propIDAudioCodec  = 7
-	propIDAudioParams = 8
-	propIDCacheState  = 9
+	propIDPause          = 1
+	propIDVolume         = 2
+	propIDMetadata       = 3
+	propIDMediaTitle     = 4
+	propIDIdleActive     = 5
+	propIDAudioBitr      = 6
+	propIDAudioCodec     = 7
+	propIDAudioParams    = 8
+	propIDCacheState     = 9
+	propIDPausedForCache = 10
 )
 
 // Event is the sealed interface implemented by every value emitted on
@@ -79,6 +80,13 @@ type CacheStateChanged struct {
 	Seconds float64
 }
 
+// BufferingChanged reports mpv's paused-for-cache state. It becomes true
+// when playback is no longer advancing because the demuxer is waiting for
+// network data (a common post-sleep failure mode for live radio streams).
+type BufferingChanged struct {
+	Stalled bool
+}
+
 func (MetadataChanged) isEvent()   {}
 func (PlaybackStarted) isEvent()   {}
 func (PlaybackPaused) isEvent()    {}
@@ -86,6 +94,7 @@ func (PlaybackError) isEvent()     {}
 func (EOF) isEvent()               {}
 func (StreamInfoChanged) isEvent() {}
 func (CacheStateChanged) isEvent() {}
+func (BufferingChanged) isEvent()  {}
 
 // Options controls Player startup.
 type Options struct {
@@ -250,6 +259,7 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 		{propIDAudioCodec, "audio-codec-name"},
 		{propIDAudioParams, "audio-params"},
 		{propIDCacheState, "demuxer-cache-state"},
+		{propIDPausedForCache, "paused-for-cache"},
 	}
 	for _, prop := range properties {
 		if err := ipc.observe(ctx, prop.id, prop.name); err != nil {
@@ -470,6 +480,11 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 		}
 		p.lastCacheSec = state.CacheDuration
 		return CacheStateChanged{Seconds: state.CacheDuration}
+	case "paused-for-cache":
+		var stalled bool
+		if err := json.Unmarshal(raw.Data, &stalled); err == nil {
+			return BufferingChanged{Stalled: stalled}
+		}
 	}
 	return nil
 }
