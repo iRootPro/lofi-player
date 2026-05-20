@@ -106,6 +106,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.mode == modeThemePicker {
 		return m.updateThemePicker(msg)
 	}
+	if m.mode == modeSettings {
+		return m.updateSettings(msg)
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -327,6 +330,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeMixer
 		return m, nil
 
+	case key.Matches(msg, m.keys.SettingsOpen):
+		return m.openSettings(), nil
+
 	case key.Matches(msg, m.keys.StreamInfo):
 		m.showStreamInfo = !m.showStreamInfo
 		return m, nil
@@ -417,6 +423,83 @@ func (m Model) updateImportStations(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m Model) openSettings() Model {
+	m.modePrev = m.mode
+	m.mode = modeSettings
+	m.settingsCursor = 0
+	m.settingsBufferSeconds = m.cfg.BufferSeconds
+	m.settingsInitialBufferSeconds = m.cfg.InitialBufferSeconds
+	return m
+}
+
+func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	adjust := func(delta int) {
+		switch m.settingsCursor {
+		case 0:
+			m.settingsBufferSeconds = clampInt(m.settingsBufferSeconds+delta, 0, 600)
+		case 1:
+			m.settingsInitialBufferSeconds = clampInt(m.settingsInitialBufferSeconds+delta, 0, 120)
+		}
+	}
+	zero := func() {
+		switch m.settingsCursor {
+		case 0:
+			m.settingsBufferSeconds = 0
+		case 1:
+			m.settingsInitialBufferSeconds = 0
+		}
+	}
+
+	switch km.String() {
+	case "up", "k":
+		m.settingsCursor = (m.settingsCursor + 1) % 2
+		return m, nil
+	case "down", "j":
+		m.settingsCursor = (m.settingsCursor + 1) % 2
+		return m, nil
+	case "left", "h", "-", "_":
+		adjust(-5)
+		return m, nil
+	case "right", "l", "+", "=":
+		adjust(5)
+		return m, nil
+	case "0":
+		zero()
+		return m, nil
+	case "enter":
+		m.cfg.BufferSeconds = m.settingsBufferSeconds
+		m.cfg.InitialBufferSeconds = m.settingsInitialBufferSeconds
+		m.mode = m.modePrev
+		if err := config.Save(m.cfg); err != nil {
+			m.toast = &Toast{Message: fmt.Sprintf("settings saved in memory but config save failed: %v", err), Kind: ToastError}
+			return m, clearToastAfter()
+		}
+		m.toast = &Toast{Message: "settings saved — restart to apply buffer changes", Kind: ToastSuccess}
+		return m, clearToastAfter()
+	case "esc":
+		m.mode = m.modePrev
+		return m, nil
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func (m Model) openThemePicker() Model {

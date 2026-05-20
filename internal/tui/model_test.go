@@ -233,6 +233,44 @@ func TestThemePickerViewAndTopChip(t *testing.T) {
 	}
 }
 
+func TestSettingsModalAdjustSaveAndCancel(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := config.Defaults()
+	cfg.Stations = []config.Station{{Name: "A", URL: "http://a"}}
+	m := NewModel(&cfg, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	m = send(t, m, "o")
+	if m.mode != modeSettings {
+		t.Fatalf("mode after o: got %v, want modeSettings", m.mode)
+	}
+	out := m.View()
+	for _, want := range []string{"settings", "network buffer", "initial buffer"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("settings view missing %q; got:\n%s", want, out)
+		}
+	}
+
+	m = send(t, m, "l", "j", "l", "l") // buffer 30→35, initial 0→10
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("saving settings produced no toast command")
+	}
+	if m.mode != modeFull {
+		t.Fatalf("mode after saving settings: got %v, want modeFull", m.mode)
+	}
+	if cfg.BufferSeconds != 35 || cfg.InitialBufferSeconds != 10 {
+		t.Fatalf("saved buffer settings = %d/%d, want 35/10", cfg.BufferSeconds, cfg.InitialBufferSeconds)
+	}
+
+	m = send(t, m, "o", "0", "esc")
+	if cfg.BufferSeconds != 35 || cfg.InitialBufferSeconds != 10 {
+		t.Fatalf("cancel changed config to %d/%d", cfg.BufferSeconds, cfg.InitialBufferSeconds)
+	}
+}
+
 func TestUpdate_QuitReturnsTeaQuit(t *testing.T) {
 	m := fixture()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})

@@ -13,6 +13,14 @@ theme: tokyo-night
 # Initial playback volume, 0–100.
 volume: 60
 
+# Network buffering for unstable connections.
+# buffer_seconds asks mpv to keep this many seconds buffered ahead when the
+# stream/server permits it. Try 60–120 on flaky Wi-Fi; 0 leaves mpv defaults.
+buffer_seconds: 30
+# initial_buffer_seconds waits for this much cache before starting/resuming
+# after a cache stall. 5–10 helps bad networks but delays playback start.
+initial_buffer_seconds: 0
+
 # Internet-radio stations. Each station needs a display name and a stream URL.
 # Share/import uses the same shape, so snippets copied from friends can be
 # pasted under this key or imported with `lofi-player --import stations.yaml`.

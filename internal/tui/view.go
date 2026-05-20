@@ -94,6 +94,8 @@ func (m Model) View() string {
 		content = inner.viewImportStations()
 	case modeThemePicker:
 		content = inner.viewThemePicker()
+	case modeSettings:
+		content = inner.viewSettings()
 	default:
 		content = inner.viewFull()
 	}
@@ -218,6 +220,93 @@ func (m Model) viewImportStations() string {
 		Padding(1, 3).
 		Render(inner)
 	return overlayModal(backdrop, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card))
+}
+
+func (m Model) viewSettings() string {
+	backdrop := m.modalBackdrop()
+
+	rows := []struct {
+		label string
+		value string
+		desc  string
+	}{
+		{
+			label: "network buffer",
+			value: formatSettingsSeconds(m.settingsBufferSeconds, "mpv default"),
+			desc:  "audio kept ahead for unstable connections",
+		},
+		{
+			label: "initial buffer",
+			value: formatSettingsSeconds(m.settingsInitialBufferSeconds, "off"),
+			desc:  "wait before start/resume after cache stalls",
+		},
+	}
+
+	var body strings.Builder
+	for i, row := range rows {
+		if i > 0 {
+			body.WriteByte('\n')
+		}
+		cursor := "  "
+		labelStyle := m.styles.StationItem
+		valueStyle := m.styles.Hint
+		descStyle := m.styles.Hint
+		if i == m.settingsCursor {
+			cursor = m.styles.Cursor.Render("›") + " "
+			labelStyle = m.styles.Cursor
+			valueStyle = m.styles.StationName
+			descStyle = m.styles.HelpDesc
+		}
+		body.WriteString(cursor)
+		body.WriteString(labelStyle.Render(fmt.Sprintf("%-18s", row.label)))
+		body.WriteString(" ")
+		body.WriteString(valueStyle.Render(row.value))
+		body.WriteString("\n    ")
+		body.WriteString(descStyle.Render(row.desc))
+	}
+
+	effective := m.settingsBufferSeconds
+	if m.settingsInitialBufferSeconds > effective {
+		effective = m.settingsInitialBufferSeconds
+	}
+	body.WriteString("\n\n")
+	if effective == 0 {
+		body.WriteString(m.styles.Hint.Render("effective read-ahead: mpv default"))
+	} else {
+		body.WriteString(m.styles.Hint.Render(fmt.Sprintf("effective read-ahead: %ds", effective)))
+	}
+
+	hint := m.styles.HelpKey.Render("↑↓/jk") + " " +
+		m.styles.HelpDesc.Render("select") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("←→/hl") + " " +
+		m.styles.HelpDesc.Render("±5s") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("0") + " " +
+		m.styles.HelpDesc.Render("off") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("enter") + " " +
+		m.styles.HelpDesc.Render("save") + "  " +
+		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpKey.Render("esc") + " " +
+		m.styles.HelpDesc.Render("cancel")
+
+	inner := m.styles.SectionHeader.Render("─── settings ───") +
+		"\n\n" + body.String() + "\n\n" + hint
+
+	card := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Muted).
+		Padding(1, 3).
+		Render(inner)
+	return overlayModal(backdrop, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, card))
+}
+
+func formatSettingsSeconds(sec int, zeroLabel string) string {
+	if sec <= 0 {
+		return zeroLabel
+	}
+	return fmt.Sprintf("%ds", sec)
 }
 
 func (m Model) viewThemePicker() string {
@@ -827,6 +916,7 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render("share/import"),
 		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
 		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render("themes"),
+		keyStyle.Render("o") + " " + m.styles.HelpDesc.Render("settings"),
 		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render("help"),
 	}
 	sep := m.styles.HelpSep.Render("  ·  ")

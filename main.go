@@ -113,7 +113,9 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), mpvStartupTimeout)
 	defer cancel()
 	player, err := audio.NewPlayer(ctx, audio.Options{
-		InitialVolume: effectiveVolume,
+		InitialVolume:        effectiveVolume,
+		BufferSeconds:        cfg.BufferSeconds,
+		InitialBufferSeconds: cfg.InitialBufferSeconds,
 	})
 	if err != nil {
 		return fmt.Errorf("starting mpv: %w", err)

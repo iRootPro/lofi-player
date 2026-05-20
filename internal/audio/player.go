@@ -103,6 +103,13 @@ type Options struct {
 	// InitialVolume is the volume (0..100) applied right after the IPC
 	// handshake. Values outside the range are clamped.
 	InitialVolume int
+	// BufferSeconds asks mpv to keep this many seconds of network audio
+	// buffered ahead when the stream/server permits it. 0 leaves mpv at
+	// its default cache behavior.
+	BufferSeconds int
+	// InitialBufferSeconds makes mpv wait for this many seconds of cache
+	// before starting/resuming after a cache stall. 0 starts immediately.
+	InitialBufferSeconds int
 }
 
 // Player owns an mpv subprocess and a JSON-IPC connection to it,
@@ -136,7 +143,7 @@ type Player struct {
 
 const mainInputConf = "PAUSE cycle pause\n"
 
-func mainMPVArgs(socketPath string) []string {
+func mainMPVArgs(socketPath string, opts Options) []string {
 	args := []string{
 		"--no-config",
 		"--idle=yes",
@@ -144,6 +151,7 @@ func mainMPVArgs(socketPath string) []string {
 		"--no-terminal",
 		"--input-ipc-server=" + socketPath,
 	}
+	args = append(args, networkCacheArgs(opts)...)
 	if runtime.GOOS == "darwin" {
 		args = append(args,
 			"--input-media-keys=yes",
@@ -151,6 +159,41 @@ func mainMPVArgs(socketPath string) []string {
 		)
 	}
 	return args
+}
+
+func networkCacheArgs(opts Options) []string {
+	bufferSec := clampSeconds(opts.BufferSeconds, 0, 600)
+	initialSec := clampSeconds(opts.InitialBufferSeconds, 0, 120)
+	if initialSec > bufferSec {
+		bufferSec = initialSec
+	}
+	if bufferSec == 0 {
+		return nil
+	}
+
+	args := []string{
+		"--cache=yes",
+		fmt.Sprintf("--demuxer-readahead-secs=%d", bufferSec),
+		"--demuxer-max-bytes=64MiB",
+	}
+	if initialSec > 0 {
+		args = append(args,
+			"--cache-pause=yes",
+			"--cache-pause-initial=yes",
+			fmt.Sprintf("--cache-pause-wait=%d", initialSec),
+		)
+	}
+	return args
+}
+
+func clampSeconds(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func ambientMPVArgs(socketPath, filePath string) []string {
@@ -216,7 +259,7 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 	}
 
 	var stderr bytes.Buffer
-	cmd := exec.Command(mpvPath, mainMPVArgs(socketPath)...)
+	cmd := exec.Command(mpvPath, mainMPVArgs(socketPath, opts)...)
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		os.RemoveAll(socketDir)

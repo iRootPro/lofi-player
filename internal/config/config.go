@@ -31,6 +31,13 @@ type Config struct {
 	Theme string `yaml:"theme"`
 	// Volume is the initial playback volume, 0–100.
 	Volume int `yaml:"volume"`
+	// BufferSeconds asks mpv to keep this many seconds of network audio
+	// buffered ahead when the stream/server permits it. 0 disables the
+	// explicit cache tuning and leaves mpv at its defaults.
+	BufferSeconds int `yaml:"buffer_seconds"`
+	// InitialBufferSeconds makes mpv wait for this many seconds of cache
+	// before starting/resuming after a cache stall. 0 starts immediately.
+	InitialBufferSeconds int `yaml:"initial_buffer_seconds"`
 	// Stations is the user's list of internet-radio stations.
 	Stations []Station `yaml:"stations"`
 }
@@ -76,8 +83,10 @@ func (s Station) IsYouTube() bool {
 // and was chosen for stability across networks and metadata correctness.
 func Defaults() Config {
 	return Config{
-		Theme:  "tokyo-night",
-		Volume: 60,
+		Theme:                "tokyo-night",
+		Volume:               60,
+		BufferSeconds:        30,
+		InitialBufferSeconds: 0,
 		Stations: []Station{
 			{Name: "SomaFM Groove Salad", URL: "https://ice1.somafm.com/groovesalad-256-mp3"},
 			{Name: "SomaFM Drone Zone", URL: "https://ice1.somafm.com/dronezone-256-mp3"},

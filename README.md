@@ -147,12 +147,26 @@ Quit with `q` or `ctrl+c`.
 | `s` | share selected station as a YAML snippet |
 | `p` | import station snippet from clipboard |
 | `x` | open ambient mixer (modal) |
+| `o` | open settings (network buffer) |
 | `i` | toggle stream-info row |
 | `?` | toggle full help card |
 | `q` / `ctrl+c` | quit |
 
 The macOS hardware Play/Pause key controls the station already loaded
 in mpv; if no station has been started yet, it is ignored.
+
+### Settings (after `o`)
+
+| key | action |
+| --- | --- |
+| `j` / `↓` · `k` / `↑` | select setting |
+| `h` / `←` · `l` / `→` | adjust by 5 seconds |
+| `0` | turn selected setting off |
+| `enter` | save |
+| `esc` | cancel |
+
+Network-buffer changes are persisted for you; no manual config editing needed.
+Restart the app to apply them to the underlying mpv process.
 
 ### Ambient mixer (after `x`)
 
@@ -226,6 +240,8 @@ on first run with sensible defaults; a documented example sits at
 ```yaml
 theme: tokyo-night        # see Themes below for all built-in theme ids
 volume: 60                # initial volume, 0–100
+buffer_seconds: 30        # network read-ahead; try 60–120 on flaky Wi-Fi
+initial_buffer_seconds: 0 # wait before start/resume; try 5–10 if streams stutter
 
 stations:
   - name: SomaFM Groove Salad

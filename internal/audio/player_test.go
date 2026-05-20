@@ -196,7 +196,7 @@ func TestClampVolume(t *testing.T) {
 }
 
 func TestMPVArgsDisableUserConfig(t *testing.T) {
-	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock")
+	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock", Options{})
 	if !hasArg(mainArgs, "--no-config") {
 		t.Fatalf("main mpv args %v do not disable user config", mainArgs)
 	}
@@ -219,11 +219,34 @@ func TestMPVArgsDisableUserConfig(t *testing.T) {
 	}
 }
 
+func TestMainMPVArgsConfigureNetworkBuffer(t *testing.T) {
+	args := mainMPVArgs("/tmp/lofi-player-test.sock", Options{BufferSeconds: 120, InitialBufferSeconds: 10})
+	for _, want := range []string{
+		"--cache=yes",
+		"--demuxer-readahead-secs=120",
+		"--demuxer-max-bytes=64MiB",
+		"--cache-pause=yes",
+		"--cache-pause-initial=yes",
+		"--cache-pause-wait=10",
+	} {
+		if !hasArg(args, want) {
+			t.Fatalf("main mpv args %v missing %s", args, want)
+		}
+	}
+}
+
+func TestMainMPVArgsInitialBufferExtendsReadahead(t *testing.T) {
+	args := mainMPVArgs("/tmp/lofi-player-test.sock", Options{InitialBufferSeconds: 45})
+	if !hasArg(args, "--demuxer-readahead-secs=45") {
+		t.Fatalf("main mpv args %v did not extend readahead to initial buffer", args)
+	}
+}
+
 func TestDarwinMPVArgsWireMediaKeys(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("media-key args are macOS-only")
 	}
-	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock")
+	mainArgs := mainMPVArgs("/tmp/lofi-player-test.sock", Options{})
 	if !hasArg(mainArgs, "--input-media-keys=yes") {
 		t.Fatalf("main mpv args %v do not enable media keys", mainArgs)
 	}

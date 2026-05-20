@@ -65,6 +65,7 @@ const (
 	modeShareStation
 	modeImportStations
 	modeThemePicker
+	modeSettings
 )
 
 // Model is the root Bubble Tea model.
@@ -139,6 +140,12 @@ type Model struct {
 	// Esc so browsing is non-destructive until Enter confirms.
 	themeCursor       int
 	themeBeforePicker string
+
+	// settingsCursor highlights the active row in the settings modal.
+	// Draft values are kept separate from cfg until Enter persists them.
+	settingsCursor               int
+	settingsBufferSeconds        int
+	settingsInitialBufferSeconds int
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel

@@ -164,8 +164,30 @@ func TestLoadFromFile_MissingFieldsKeepDefaults(t *testing.T) {
 	if cfg.Volume != defaults.Volume {
 		t.Errorf("Volume = %d, want default %d", cfg.Volume, defaults.Volume)
 	}
+	if cfg.BufferSeconds != defaults.BufferSeconds {
+		t.Errorf("BufferSeconds = %d, want default %d", cfg.BufferSeconds, defaults.BufferSeconds)
+	}
+	if cfg.InitialBufferSeconds != defaults.InitialBufferSeconds {
+		t.Errorf("InitialBufferSeconds = %d, want default %d", cfg.InitialBufferSeconds, defaults.InitialBufferSeconds)
+	}
 	if len(cfg.Stations) != 1 || cfg.Stations[0].Name != "Only" {
 		t.Errorf("Stations = %+v, want [{Only http://x}]", cfg.Stations)
+	}
+}
+
+func TestLoadFromFile_ExplicitZeroBufferDisablesTuning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	body := []byte("theme: tokyo-night\nvolume: 60\nbuffer_seconds: 0\ninitial_buffer_seconds: 0\nstations: []\n")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+	cfg, err := loadFromFile(path)
+	if err != nil {
+		t.Fatalf("loadFromFile: %v", err)
+	}
+	if cfg.BufferSeconds != 0 || cfg.InitialBufferSeconds != 0 {
+		t.Fatalf("buffer settings = %d/%d, want explicit zeroes", cfg.BufferSeconds, cfg.InitialBufferSeconds)
 	}
 }
 
@@ -213,6 +235,12 @@ func TestDefaultsAreNonEmpty(t *testing.T) {
 	}
 	if d.Volume < 0 || d.Volume > 100 {
 		t.Errorf("Defaults().Volume = %d, want 0..100", d.Volume)
+	}
+	if d.BufferSeconds <= 0 {
+		t.Errorf("Defaults().BufferSeconds = %d, want positive", d.BufferSeconds)
+	}
+	if d.InitialBufferSeconds < 0 {
+		t.Errorf("Defaults().InitialBufferSeconds = %d, want non-negative", d.InitialBufferSeconds)
 	}
 	if len(d.Stations) == 0 {
 		t.Error("Defaults().Stations is empty")
@@ -295,4 +323,3 @@ stations:
 		t.Errorf("station IsYouTube() = false, want true")
 	}
 }
-
