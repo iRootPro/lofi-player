@@ -15,7 +15,11 @@ import (
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
-const volumeStep = 5
+const (
+	volumeStep                = 5
+	settingsMaxBufferSeconds  = 600
+	settingsMaxInitialSeconds = 10
+)
 
 // Update applies a message to the model and returns the new model plus
 // any commands to run. Receiver is by value; never mutate m through a
@@ -429,8 +433,8 @@ func (m Model) openSettings() Model {
 	m.modePrev = m.mode
 	m.mode = modeSettings
 	m.settingsCursor = 0
-	m.settingsBufferSeconds = m.cfg.BufferSeconds
-	m.settingsInitialBufferSeconds = m.cfg.InitialBufferSeconds
+	m.settingsBufferSeconds = clampInt(m.cfg.BufferSeconds, 0, settingsMaxBufferSeconds)
+	m.settingsInitialBufferSeconds = clampInt(m.cfg.InitialBufferSeconds, 0, settingsMaxInitialSeconds)
 	return m
 }
 
@@ -443,9 +447,9 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	adjust := func(delta int) {
 		switch m.settingsCursor {
 		case 0:
-			m.settingsBufferSeconds = clampInt(m.settingsBufferSeconds+delta, 0, 600)
+			m.settingsBufferSeconds = clampInt(m.settingsBufferSeconds+delta, 0, settingsMaxBufferSeconds)
 		case 1:
-			m.settingsInitialBufferSeconds = clampInt(m.settingsInitialBufferSeconds+delta, 0, 120)
+			m.settingsInitialBufferSeconds = clampInt(m.settingsInitialBufferSeconds+delta, 0, settingsMaxInitialSeconds)
 		}
 	}
 	zero := func() {

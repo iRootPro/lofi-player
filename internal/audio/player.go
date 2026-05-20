@@ -109,6 +109,8 @@ type Options struct {
 	BufferSeconds int
 	// InitialBufferSeconds makes mpv wait for this many seconds of cache
 	// before starting/resuming after a cache stall. 0 starts immediately.
+	// Values above 10 are clamped because many live-radio streams never
+	// build a deeper initial cache and would appear stuck.
 	InitialBufferSeconds int
 }
 
@@ -141,7 +143,11 @@ type Player struct {
 	lastCacheSec float64
 }
 
-const mainInputConf = "PAUSE cycle pause\n"
+const (
+	mainInputConf           = "PAUSE cycle pause\n"
+	maxBufferSeconds        = 600
+	maxInitialBufferSeconds = 10
+)
 
 func mainMPVArgs(socketPath string, opts Options) []string {
 	args := []string{
@@ -162,8 +168,8 @@ func mainMPVArgs(socketPath string, opts Options) []string {
 }
 
 func networkCacheArgs(opts Options) []string {
-	bufferSec := clampSeconds(opts.BufferSeconds, 0, 600)
-	initialSec := clampSeconds(opts.InitialBufferSeconds, 0, 120)
+	bufferSec := clampSeconds(opts.BufferSeconds, 0, maxBufferSeconds)
+	initialSec := clampSeconds(opts.InitialBufferSeconds, 0, maxInitialBufferSeconds)
 	if initialSec > bufferSec {
 		bufferSec = initialSec
 	}

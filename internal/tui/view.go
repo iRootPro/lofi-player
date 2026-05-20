@@ -238,7 +238,7 @@ func (m Model) viewSettings() string {
 		{
 			label: "initial buffer",
 			value: formatSettingsSeconds(m.settingsInitialBufferSeconds, "off"),
-			desc:  "wait before start/resume after cache stalls",
+			desc:  "wait before start/resume, capped at 10s for live radio",
 		},
 	}
 

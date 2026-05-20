@@ -160,7 +160,7 @@ in mpv; if no station has been started yet, it is ignored.
 | key | action |
 | --- | --- |
 | `j` / `↓` · `k` / `↑` | select setting |
-| `h` / `←` · `l` / `→` | adjust by 5 seconds |
+| `h` / `←` · `l` / `→` | adjust by 5 seconds (`initial buffer` is capped at 10s) |
 | `0` | turn selected setting off |
 | `enter` | save |
 | `esc` | cancel |
@@ -241,7 +241,7 @@ on first run with sensible defaults; a documented example sits at
 theme: tokyo-night        # see Themes below for all built-in theme ids
 volume: 60                # initial volume, 0–100
 buffer_seconds: 30        # network read-ahead; try 60–120 on flaky Wi-Fi
-initial_buffer_seconds: 0 # wait before start/resume; try 5–10 if streams stutter
+initial_buffer_seconds: 0 # wait before start/resume; capped at 10s for live radio
 
 stations:
   - name: SomaFM Groove Salad

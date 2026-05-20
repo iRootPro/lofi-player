@@ -265,7 +265,12 @@ func TestSettingsModalAdjustSaveAndCancel(t *testing.T) {
 		t.Fatalf("saved buffer settings = %d/%d, want 35/10", cfg.BufferSeconds, cfg.InitialBufferSeconds)
 	}
 
-	m = send(t, m, "o", "0", "esc")
+	m = send(t, m, "o", "j", "l")
+	if m.settingsInitialBufferSeconds != 10 {
+		t.Fatalf("initial buffer exceeded cap: got %d, want 10", m.settingsInitialBufferSeconds)
+	}
+
+	m = send(t, m, "0", "esc")
 	if cfg.BufferSeconds != 35 || cfg.InitialBufferSeconds != 10 {
 		t.Fatalf("cancel changed config to %d/%d", cfg.BufferSeconds, cfg.InitialBufferSeconds)
 	}

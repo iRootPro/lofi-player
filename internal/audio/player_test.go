@@ -235,10 +235,10 @@ func TestMainMPVArgsConfigureNetworkBuffer(t *testing.T) {
 	}
 }
 
-func TestMainMPVArgsInitialBufferExtendsReadahead(t *testing.T) {
+func TestMainMPVArgsInitialBufferIsCappedForLiveRadio(t *testing.T) {
 	args := mainMPVArgs("/tmp/lofi-player-test.sock", Options{InitialBufferSeconds: 45})
-	if !hasArg(args, "--demuxer-readahead-secs=45") {
-		t.Fatalf("main mpv args %v did not extend readahead to initial buffer", args)
+	if !hasArg(args, "--demuxer-readahead-secs=10") || !hasArg(args, "--cache-pause-wait=10") {
+		t.Fatalf("main mpv args %v did not cap initial buffer to 10s", args)
 	}
 }
 
