@@ -37,6 +37,10 @@ type Options struct {
 	// responsibility; a returned error surfaces as an error toast,
 	// matching the AddStation save-failure pattern.
 	SaveAmbient func(map[string]int) error
+	// SaveTheme is called when the user confirms a theme in the picker.
+	// This persists the choice immediately, so it survives crashes or
+	// host restarts before normal shutdown state saving runs.
+	SaveTheme func(string) error
 	// ShowStreamInfo overrides the default visibility of the
 	// stream-info row under the now-playing card. nil = use default
 	// (true). Pointer rather than bool so the caller can express
@@ -155,6 +159,7 @@ type Model struct {
 	// still equals this value (debounce coalescing).
 	ambientSaveSeq int
 	saveAmbient    func(map[string]int) error
+	saveTheme      func(string) error
 
 	// streamInfo is the latest technical info reported by mpv for the
 	// current station (bitrate, codec, sample rate, channels). All
@@ -262,6 +267,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		mixer:            mixer,
 		mixerUI:          newMixerModel(mixer),
 		saveAmbient:      opts.SaveAmbient,
+		saveTheme:        opts.SaveTheme,
 		showStreamInfo:   showStreamInfo,
 		pendingDeleteIdx: -1,
 		youtubeReady:     opts.YouTubeReady,

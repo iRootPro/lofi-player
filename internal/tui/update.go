@@ -539,8 +539,15 @@ func (m Model) updateThemePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		move(1)
 		return m, nil
 	case "enter":
+		name := m.theme.Name
 		m.mode = m.modePrev
 		m.themeBeforePicker = ""
+		if m.saveTheme != nil {
+			if err := m.saveTheme(name); err != nil {
+				m.toast = &Toast{Message: fmt.Sprintf("theme selected but state save failed: %v", err), Kind: ToastError}
+				return m, clearToastAfter()
+			}
+		}
 		return m, nil
 	case "esc":
 		if m.themeBeforePicker != "" {

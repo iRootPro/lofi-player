@@ -139,6 +139,11 @@ func run() error {
 		current.Ambient = snap
 		return state.Save(current)
 	}
+	opts.SaveTheme = func(name string) error {
+		current := state.Load()
+		current.Theme = name
+		return state.Save(current)
+	}
 
 	p := tea.NewProgram(tui.NewModel(cfg, player, mixer, opts), tea.WithAltScreen())
 	finalModel, err := p.Run()

@@ -210,6 +210,42 @@ func TestThemePickerPreviewCancelAndConfirm(t *testing.T) {
 	}
 }
 
+func TestThemePickerSavesOnlyOnConfirm(t *testing.T) {
+	cfg := &config.Config{Theme: "tokyo-night", Volume: 60, Stations: []config.Station{{Name: "A", URL: "http://a"}}}
+	var saved []string
+	m := NewModel(cfg, nil, audio.NewAmbientMixer(), Options{
+		AutoplayStation: -1,
+		SaveTheme: func(name string) error {
+			saved = append(saved, name)
+			return nil
+		},
+	})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+
+	m = send(t, m, "t", "j")
+	if len(saved) != 0 {
+		t.Fatalf("preview saved theme unexpectedly: %v", saved)
+	}
+	m = send(t, m, "esc")
+	if len(saved) != 0 {
+		t.Fatalf("cancel saved theme unexpectedly: %v", saved)
+	}
+
+	m = send(t, m, "t", "j")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatalf("successful theme save returned unexpected command")
+	}
+	if len(saved) != 1 || saved[0] != "catppuccin-mocha" {
+		t.Fatalf("saved themes = %v, want [catppuccin-mocha]", saved)
+	}
+	if m.mode != modeFull {
+		t.Fatalf("mode after confirm: got %v, want modeFull", m.mode)
+	}
+}
+
 func TestThemePickerViewAndTopChip(t *testing.T) {
 	m := fixture()
 	out := m.View()
