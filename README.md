@@ -1,6 +1,6 @@
 # lofi-player
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](README.ru.md) · [Changelog](CHANGELOG.md)
 
 A keyboard-driven TUI for lofi, chillhop and ambient internet radio —
 built to live in a tmux pane while you work.
@@ -29,6 +29,9 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
 
 - **Internet radio** — any URL `mpv` can open: Icecast, Shoutcast, raw
   HTTP/HTTPS streams. SomaFM and Radio Paradise ship in the defaults.
+- **Radio Browser discovery** — search the public directory without leaving
+  the terminal, play a result before changing your library, then save only
+  the stations you like.
 - **YouTube streams** — Lofi Girl 24/7 and friends, routed through
   mpv's `ytdl_hook` (needs `yt-dlp`).
 - **Ambient mixer** — five looped beds (rain, fire, cafe, white noise,
@@ -142,9 +145,10 @@ Quit with `q` or `ctrl+c`.
 | `t` | open theme picker |
 | `m` | toggle mini mode |
 | `a` | add station (modal) |
+| `/` | search Radio Browser (modal) |
 | `e` | edit selected station (modal) |
 | `d` | delete selected station (with confirmation) |
-| `s` | share selected station as a YAML snippet |
+| `s` | share selected station as a YAML snippet; save an active unsaved Radio Browser station |
 | `p` | import station snippet from clipboard |
 | `x` | open ambient mixer (modal) |
 | `o` | open settings (network buffer) |
@@ -154,6 +158,46 @@ Quit with `q` or `ctrl+c`.
 
 The macOS hardware Play/Pause key controls the station already loaded
 in mpv; if no station has been started yet, it is ignored.
+
+### Radio Browser discovery (after `/`)
+
+Type a query and wait 350 ms; the result list updates automatically once the
+query contains at least two characters. Searches support ordinary station-name
+text plus these filters, which may be combined:
+
+| query | meaning |
+|---|---|
+| `ambient` | station name contains `ambient` |
+| `tag:ambient` | station is tagged `ambient` |
+| `country:JP` | station country code is Japan |
+| `lang:english` | station language contains English |
+
+| key | action |
+|---|---|
+| `↓` | move from the search field to the first result |
+| `j` / `↓` · `k` / `↑` | select a result; `↑` at the first result returns to search |
+| `tab` / `shift+tab` | alternate switch between search field and results |
+| `enter` | play selected station without saving it |
+| `s` | save selected station to `config.yaml` (duplicates by URL are skipped) |
+| `esc` | close search; an unsaved station keeps playing |
+
+Search uses [Radio Browser](https://www.radio-browser.info/)'s public mirror
+network. Successful responses are cached under
+`$XDG_CACHE_HOME/lofi-player/radio-browser` (or `~/.cache/...`); when the
+network is unavailable, the search view marks cached results clearly. Playing a
+catalog result does not write to `config.yaml`. To remove a saved station, return to the main
+library and use `d`; public-catalog entries themselves are never deleted.
+
+The modal confirms every play and save action in place: `Loading …` appears
+immediately, `Playing … · not saved` confirms a started stream, and save
+results appear as `ok:`, `note:`, or `error:` messages. These messages never
+include raw Go, mpv, or HTTP errors.
+
+If an unsaved catalog station is still playing after you close discovery, the
+now-playing view keeps it actionable: `Radio Browser · not saved · s save`.
+Here `s` saves the active catalog stream even if the library cursor is on a
+different station. After saving, it returns to sharing the selected library
+station.
 
 ### Settings (after `o`)
 

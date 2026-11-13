@@ -39,27 +39,34 @@ type Event interface{ isEvent() }
 // resolves to a track that differs from the previous one. Title or
 // Artist (but not both) may be empty when the stream omits the field.
 type MetadataChanged struct {
-	Title  string
-	Artist string
+	Title     string
+	Artist    string
+	RequestID uint64
 }
+
+// PlaybackLoadStarted fires when mpv starts opening a newly loaded file. It
+// precedes stream-specific terminal events and lets consumers distinguish an
+// old stream's queued EOF/error from the file they just requested.
+type PlaybackLoadStarted struct{ RequestID uint64 }
 
 // PlaybackStarted fires when mpv transitions out of the paused state —
 // after a fresh loadfile finishes buffering, or after an explicit Resume.
-type PlaybackStarted struct{}
+type PlaybackStarted struct{ RequestID uint64 }
 
 // PlaybackPaused fires when mpv enters the paused state.
-type PlaybackPaused struct{}
+type PlaybackPaused struct{ RequestID uint64 }
 
 // PlaybackError is delivered when mpv signals end-file with an error
 // reason (network drop, 404, decoder failure). The TUI surfaces this as
 // a transient toast (plan §6 Phase 1).
 type PlaybackError struct {
-	Err error
+	Err       error
+	RequestID uint64
 }
 
 // EOF is delivered when mpv signals end-file with reason=eof. Live
 // streams normally don't reach EOF except on graceful server shutdown.
-type EOF struct{}
+type EOF struct{ RequestID uint64 }
 
 // StreamInfoChanged carries technical info about the active stream as
 // reported by mpv (bitrate, codec, sample rate, channels). Each field
@@ -71,30 +78,34 @@ type StreamInfoChanged struct {
 	Codec      string // short name, e.g. "mp3", "opus"; "" if unknown
 	SampleRate int    // Hz; 0 if unknown
 	Channels   int    // 1, 2, …; 0 if unknown
+	RequestID  uint64
 }
 
 // CacheStateChanged reports how many seconds of audio mpv has buffered
 // ahead of the playback head. A draining value (or zero while playing)
 // signals the network is failing.
 type CacheStateChanged struct {
-	Seconds float64
+	Seconds   float64
+	RequestID uint64
 }
 
 // BufferingChanged reports mpv's paused-for-cache state. It becomes true
 // when playback is no longer advancing because the demuxer is waiting for
 // network data (a common post-sleep failure mode for live radio streams).
 type BufferingChanged struct {
-	Stalled bool
+	Stalled   bool
+	RequestID uint64
 }
 
-func (MetadataChanged) isEvent()   {}
-func (PlaybackStarted) isEvent()   {}
-func (PlaybackPaused) isEvent()    {}
-func (PlaybackError) isEvent()     {}
-func (EOF) isEvent()               {}
-func (StreamInfoChanged) isEvent() {}
-func (CacheStateChanged) isEvent() {}
-func (BufferingChanged) isEvent()  {}
+func (MetadataChanged) isEvent()     {}
+func (PlaybackLoadStarted) isEvent() {}
+func (PlaybackStarted) isEvent()     {}
+func (PlaybackPaused) isEvent()      {}
+func (PlaybackError) isEvent()       {}
+func (EOF) isEvent()                 {}
+func (StreamInfoChanged) isEvent()   {}
+func (CacheStateChanged) isEvent()   {}
+func (BufferingChanged) isEvent()    {}
 
 // Options controls Player startup.
 type Options struct {
@@ -129,6 +140,10 @@ type Player struct {
 
 	closeOnce sync.Once
 	closeErr  error
+	// playMu serializes loadfile/unpause pairs. Rapid station changes (for
+	// example browsing Radio Browser previews) must not interleave two mpv
+	// replace commands and leave playback on an indeterminate URL.
+	playMu sync.Mutex
 
 	mu         sync.Mutex
 	lastTitle  string
@@ -141,6 +156,12 @@ type Player struct {
 	// times per second; we only forward when the value moves past a
 	// quarter-second threshold to keep the event channel quiet.
 	lastCacheSec float64
+	// pendingPlayRequests are matched in start-file order. mpv emits each
+	// start-file before the terminal events for that loaded source, which lets
+	// the TUI ignore delayed events from a stream it has just replaced.
+	pendingPlayRequests []uint64
+	activePlayRequest   uint64
+	latestPlayRequest   uint64
 }
 
 const (
@@ -327,26 +348,53 @@ func NewPlayer(ctx context.Context, opts Options) (*Player, error) {
 }
 
 // Play loads url and starts (or resumes) playback. Any currently-playing
-// stream is replaced. Metadata state is reset so the next ICY update
-// emits a fresh MetadataChanged.
-func (p *Player) Play(url string) error {
+// stream is replaced. Per-stream metadata and technical state are reset only
+// when mpv confirms start-file, so delayed properties from the replaced stream
+// cannot suppress identical values from the new stream.
+func (p *Player) Play(url string, requestID uint64) error {
+	p.playMu.Lock()
+	defer p.playMu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	p.mu.Lock()
-	p.lastTitle = ""
-	p.lastArtist = ""
-	p.streamInfo = StreamInfoChanged{}
-	p.lastCacheSec = 0
-	p.mu.Unlock()
+	if !p.queuePlayRequest(requestID) {
+		return fmt.Errorf("discarding stale play request %d", requestID)
+	}
 
 	if _, err := p.ipc.command(ctx, "loadfile", url, "replace"); err != nil {
+		p.removePendingPlayRequest(requestID)
 		return fmt.Errorf("loadfile: %w", err)
 	}
 	if _, err := p.ipc.command(ctx, "set_property", "pause", false); err != nil {
+		p.removePendingPlayRequest(requestID)
 		return fmt.Errorf("unpause after loadfile: %w", err)
 	}
 	return nil
+}
+
+// queuePlayRequest accepts monotonic UI request IDs. Bubble Tea commands may
+// begin out of order, so an older command must never replace the newest stream.
+func (p *Player) queuePlayRequest(requestID uint64) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if requestID < p.latestPlayRequest {
+		return false
+	}
+	p.latestPlayRequest = requestID
+	p.pendingPlayRequests = append(p.pendingPlayRequests, requestID)
+	return true
+}
+
+func (p *Player) removePendingPlayRequest(requestID uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, id := range p.pendingPlayRequests {
+		if id == requestID {
+			p.pendingPlayRequests = append(p.pendingPlayRequests[:i], p.pendingPlayRequests[i+1:]...)
+			return
+		}
+	}
 }
 
 // Pause halts playback. The stream stays loaded so Resume picks up
@@ -417,6 +465,8 @@ func (p *Player) translate() {
 
 func (p *Player) translateOne(raw ipcEvent) Event {
 	switch raw.Event {
+	case "start-file":
+		return PlaybackLoadStarted{RequestID: p.beginPlayRequest()}
 	case "property-change":
 		return p.translatePropertyChange(raw)
 	case "playback-restart":
@@ -425,13 +475,13 @@ func (p *Player) translateOne(raw ipcEvent) Event {
 		// "loading is done" signal — the pause property-change is not,
 		// because loadfile keeps pause at its previous value (false ➜
 		// false yields no change event).
-		return PlaybackStarted{}
+		return PlaybackStarted{RequestID: p.currentPlayRequest()}
 	case "end-file":
 		switch raw.Reason {
 		case "eof":
-			return EOF{}
+			return EOF{RequestID: p.currentPlayRequest()}
 		case "error":
-			return PlaybackError{Err: errors.New("playback ended with error")}
+			return PlaybackError{Err: errors.New("playback ended with error"), RequestID: p.currentPlayRequest()}
 		}
 	}
 	return nil
@@ -443,9 +493,9 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 		var paused bool
 		if err := json.Unmarshal(raw.Data, &paused); err == nil {
 			if paused {
-				return PlaybackPaused{}
+				return PlaybackPaused{RequestID: p.currentPlayRequest()}
 			}
-			return PlaybackStarted{}
+			return PlaybackStarted{RequestID: p.currentPlayRequest()}
 		}
 	case "metadata":
 		var meta map[string]string
@@ -465,7 +515,7 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 			defer p.mu.Unlock()
 			if p.lastArtist == "" && title != p.lastTitle {
 				p.lastTitle = title
-				return MetadataChanged{Title: title}
+				return MetadataChanged{Title: title, RequestID: p.activePlayRequest}
 			}
 		}
 	case "audio-bitrate":
@@ -528,14 +578,42 @@ func (p *Player) translatePropertyChange(raw ipcEvent) Event {
 			return nil
 		}
 		p.lastCacheSec = state.CacheDuration
-		return CacheStateChanged{Seconds: state.CacheDuration}
+		return CacheStateChanged{Seconds: state.CacheDuration, RequestID: p.activePlayRequest}
 	case "paused-for-cache":
 		var stalled bool
 		if err := json.Unmarshal(raw.Data, &stalled); err == nil {
-			return BufferingChanged{Stalled: stalled}
+			return BufferingChanged{Stalled: stalled, RequestID: p.currentPlayRequest()}
 		}
 	}
 	return nil
+}
+
+func (p *Player) beginPlayRequest() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.pendingPlayRequests) == 0 {
+		return p.activePlayRequest
+	}
+	p.activePlayRequest = p.pendingPlayRequests[0]
+	p.pendingPlayRequests = p.pendingPlayRequests[1:]
+	p.resetStreamStateLocked()
+	return p.activePlayRequest
+}
+
+// resetStreamStateLocked clears the deduplication snapshots at the precise
+// point mpv associates property events with the accepted play request. p.mu
+// must be held by the caller.
+func (p *Player) resetStreamStateLocked() {
+	p.lastTitle = ""
+	p.lastArtist = ""
+	p.streamInfo = StreamInfoChanged{}
+	p.lastCacheSec = 0
+}
+
+func (p *Player) currentPlayRequest() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.activePlayRequest
 }
 
 // updateStreamInfo applies mutate to the cached StreamInfoChanged
@@ -547,6 +625,7 @@ func (p *Player) updateStreamInfo(mutate func(*StreamInfoChanged) bool) Event {
 	if !mutate(&p.streamInfo) {
 		return nil
 	}
+	p.streamInfo.RequestID = p.activePlayRequest
 	return p.streamInfo
 }
 
@@ -587,7 +666,7 @@ func (p *Player) maybeMetadata(title, artist string) Event {
 	}
 	p.lastTitle = title
 	p.lastArtist = artist
-	return MetadataChanged{Title: title, Artist: artist}
+	return MetadataChanged{Title: title, Artist: artist, RequestID: p.activePlayRequest}
 }
 
 func clampVolume(v int) int {

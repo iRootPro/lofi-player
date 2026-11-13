@@ -9,6 +9,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -55,6 +56,10 @@ type Options struct {
 	// renders YouTube stations as `unavailable` and togglePlayPause
 	// surfaces a toast instead of attempting playback.
 	YouTubeReady bool
+	// Discovery provides the Radio Browser search and click-reporting
+	// operations. It is optional so the rest of the player keeps working
+	// in embedders that deliberately omit public discovery.
+	Discovery radiobrowser.Client
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -70,6 +75,7 @@ const (
 	modeImportStations
 	modeThemePicker
 	modeSettings
+	modeDiscovery
 )
 
 // Model is the root Bubble Tea model.
@@ -86,13 +92,23 @@ type Model struct {
 
 	cursor     int
 	playingIdx int
-	playing    bool
+	// previewStation is a Radio Browser result that is currently playing
+	// but has not been added to cfg.Stations. It takes precedence over
+	// playingIdx for now-playing state only; the library remains untouched
+	// until the user explicitly saves it.
+	previewStation *config.Station
+	previewUUID    string
+	playing        bool
 	// loading is true between dispatching playCmd (or autoplay on
 	// startup) and the first PlaybackStarted event from mpv. While
 	// loading is true, the status indicator renders the spinner
 	// instead of the ●/◯ glyph.
 	loading bool
-	volume  int
+	// playRequestID identifies the most recently requested mpv load. Audio
+	// lifecycle events carry the ID assigned by Player, so delayed events from
+	// a replaced stream cannot mutate the current preview.
+	playRequestID uint64
+	volume        int
 
 	currentTrack Track
 	toast        *Toast
@@ -122,8 +138,14 @@ type Model struct {
 	// modePrev is the layout to restore when a modal closes. modeFull
 	// during everyday usage; modeMini if the modal was opened from
 	// compact mode.
-	modePrev viewMode
-	addForm  addStationForm
+	modePrev        viewMode
+	addForm         addStationForm
+	discovery       discoveryModel
+	discoveryClient radiobrowser.Client
+	// discoverySession increases every time the search modal opens. It is
+	// carried by debounce/network messages so a late response from a closed
+	// search cannot populate a new search session with the same sequence ID.
+	discoverySession int
 
 	// pendingDeleteIdx points at the station awaiting user confirmation
 	// in modeConfirmDelete. -1 outside that mode.
@@ -218,6 +240,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	playingIdx := -1
 	playing := false
 	loading := false
+	playRequestID := uint64(0)
 	autoplayURL := ""
 	if opts.AutoplayStation >= 0 && opts.AutoplayStation < len(cfg.Stations) {
 		// Skip autoplay for YouTube stations when yt-dlp is missing —
@@ -229,6 +252,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 			playingIdx = opts.AutoplayStation
 			playing = true
 			loading = true
+			playRequestID = 1
 			autoplayURL = s.URL
 		}
 	}
@@ -261,6 +285,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		playingIdx:       playingIdx,
 		playing:          playing,
 		loading:          loading,
+		playRequestID:    playRequestID,
 		volume:           volume,
 		spinner:          sp,
 		autoplayURL:      autoplayURL,
@@ -271,6 +296,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		showStreamInfo:   showStreamInfo,
 		pendingDeleteIdx: -1,
 		youtubeReady:     opts.YouTubeReady,
+		discoveryClient:  opts.Discovery,
 		startupWarning:   opts.StartupWarning,
 		toast:            startupToast,
 	}
@@ -283,7 +309,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{waitForEvent(m.player), m.spinner.Tick, pulseTick(), logoTick(), clockTick()}
 	if m.autoplayURL != "" {
-		cmds = append(cmds, playCmd(m.player, m.autoplayURL))
+		cmds = append(cmds, playCmd(m.player, m.autoplayURL, m.playRequestID))
 	}
 	if m.startupWarning != "" {
 		// Auto-clear the startup toast on the same schedule as the
@@ -305,10 +331,37 @@ func (m Model) Volume() int { return m.volume }
 // LastStationName returns the display name of the currently-playing (or
 // most-recently-played) station, or empty string if nothing is playing.
 func (m Model) LastStationName() string {
+	if m.previewStation != nil {
+		// Preview stations are intentionally not made part of persisted
+		// session state. main preserves the last saved station instead.
+		return ""
+	}
 	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
 		return ""
 	}
 	return m.cfg.Stations[m.playingIdx].Name
+}
+
+// activeStation returns the station currently loaded in mpv, including an
+// unsaved Radio Browser preview.
+func (m Model) activeStation() (config.Station, bool) {
+	if m.previewStation != nil {
+		return *m.previewStation, true
+	}
+	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+		return config.Station{}, false
+	}
+	return m.cfg.Stations[m.playingIdx], true
+}
+
+func (m Model) hasActiveStation() bool {
+	_, ok := m.activeStation()
+	return ok
+}
+
+func (m *Model) nextPlayRequestID() uint64 {
+	m.playRequestID++
+	return m.playRequestID
 }
 
 // ShowStreamInfo returns whether the stream-info row is currently

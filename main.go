@@ -16,6 +16,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/state"
 	"github.com/iRootPro/lofi-player/internal/tui"
@@ -104,6 +105,7 @@ func run() error {
 		ShowStreamInfo:  st.ShowStreamInfo,
 		StartupWarning:  youtubeWarning,
 		YouTubeReady:    youtubeWarning == "",
+		Discovery:       radiobrowser.New(radiobrowser.Options{}),
 	}
 	effectiveVolume := cfg.Volume
 	if opts.Volume > 0 {
@@ -155,10 +157,16 @@ func run() error {
 		// Persistence is best-effort — write failure logs to stderr (now
 		// that the alt-screen is restored) and never aborts shutdown.
 		showInfo := m.ShowStreamInfo()
+		lastStationName := m.LastStationName()
+		if lastStationName == "" {
+			// A Radio Browser preview is intentionally not persisted. Keep
+			// the last saved station selected for the next launch instead.
+			lastStationName = st.LastStationName
+		}
 		next := &state.State{
 			Theme:           m.ThemeName(),
 			Volume:          m.Volume(),
-			LastStationName: m.LastStationName(),
+			LastStationName: lastStationName,
 			Ambient:         mixer.Volumes(),
 			ShowStreamInfo:  &showInfo,
 		}

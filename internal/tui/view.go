@@ -96,6 +96,8 @@ func (m Model) View() string {
 		content = inner.viewThemePicker()
 	case modeSettings:
 		content = inner.viewSettings()
+	case modeDiscovery:
+		content = inner.viewDiscovery()
 	default:
 		content = inner.viewFull()
 	}
@@ -408,6 +410,21 @@ func (m Model) viewAddStation() string {
 	return overlayModal(backdrop, form)
 }
 
+// viewDiscovery overlays the public Radio Browser search without losing the
+// now-playing context. Closing it never stops a transient preview.
+func (m Model) viewDiscovery() string {
+	playback := discoveryPlayback{}
+	if m.previewStation != nil {
+		playback = discoveryPlayback{
+			stationName: m.previewStation.Name,
+			streamURL:   m.previewStation.URL,
+			loading:     m.loading,
+			playing:     m.playing,
+		}
+	}
+	return overlayModal(m.modalBackdrop(), m.discovery.view(m.width, m.styles, m.theme.Muted, playback, m.spinner.View()))
+}
+
 // overlayModal replaces the middle rows of the current screen with a
 // pre-rendered, horizontally-centered modal. Previously modal views were
 // appended below the backdrop (`backdrop + "\n\n" + card`), which made
@@ -497,7 +514,8 @@ func (m Model) viewMini() string {
 // noisy double-border. Visual hierarchy now comes from typography
 // (bold station name) and the status glyph (●/◯/spinner).
 func (m Model) renderNowPlaying() string {
-	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+	station, ok := m.activeStation()
+	if !ok {
 		return leftPad + m.styles.Hint.Render("— no station selected —")
 	}
 
@@ -509,7 +527,6 @@ func (m Model) renderNowPlaying() string {
 		innerWidth = 24
 	}
 
-	station := m.cfg.Stations[m.playingIdx]
 	stationLine := leftPad + m.statusBlock() + "  " + m.styles.StationName.Render(station.Name)
 	if icon := m.stationKindIcon(station); icon != "" {
 		stationLine += "  " + icon
@@ -519,10 +536,29 @@ func (m Model) renderNowPlaying() string {
 	}
 	trackLine := leftPad + m.formatTrack(innerWidth)
 	out := stationLine + "\n" + trackLine
+	if hint := m.renderUnsavedDiscoveryHint(); hint != "" {
+		out += "\n" + hint
+	}
 	if info := m.renderStreamInfoLine(); info != "" {
 		out += "\n" + info
 	}
 	return out
+}
+
+// renderUnsavedDiscoveryHint makes a transient catalog stream actionable after
+// discovery closes. It appears in both full and mini layouts because both use
+// renderNowPlaying.
+func (m Model) renderUnsavedDiscoveryHint() string {
+	if m.previewStation == nil {
+		return ""
+	}
+	return leftPad +
+		m.styles.HelpKey.Render("Radio Browser") +
+		m.styles.HelpSep.Render(" · ") +
+		m.styles.StationCursor.Render("not saved") +
+		m.styles.HelpSep.Render(" · ") +
+		m.styles.HelpKey.Render("s") + " " +
+		m.styles.HelpDesc.Render("save")
 }
 
 // bufferBarCells / bufferFullSeconds / bufferLowSeconds /
@@ -551,7 +587,7 @@ func (m Model) renderStreamInfoLine() string {
 	if !m.showStreamInfo {
 		return ""
 	}
-	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+	if !m.hasActiveStation() {
 		return ""
 	}
 
@@ -775,7 +811,7 @@ func truncateRunes(s string, maxWidth int) string {
 // selected so the right-side area collapses cleanly back to just
 // the now-playing block in that state.
 func (m Model) renderLogo() string {
-	if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+	if !m.hasActiveStation() {
 		return ""
 	}
 
@@ -822,7 +858,7 @@ var audioMeterGlyphs = []rune("▁▂▃▄▅▆▇")
 var audioMeterPattern = []int{1, 3, 5, 2, 6, 4, 2, 5, 3, 1, 4, 6, 2, 5}
 
 func (m Model) renderAudioMeter(width int) string {
-	if width <= 0 || (m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations)) {
+	if width <= 0 || !m.hasActiveStation() {
 		return ""
 	}
 
@@ -909,11 +945,16 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
 
 	keyStyle := m.styles.AppTitle
+	libraryAction := "share/import"
+	if m.previewStation != nil {
+		libraryAction = "save/paste"
+	}
 	parts := []string{
 		keyStyle.Render("space") + " " + m.styles.HelpDesc.Render("play/pause"),
 		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render("station"),
+		keyStyle.Render("/") + " " + m.styles.HelpDesc.Render("discover"),
 		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
-		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render("share/import"),
+		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render(libraryAction),
 		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
 		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render("themes"),
 		keyStyle.Render("o") + " " + m.styles.HelpDesc.Render("settings"),

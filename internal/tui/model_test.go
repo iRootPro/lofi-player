@@ -329,7 +329,7 @@ func TestPlaybackStartedWhileIdleDoesNotMarkPlaying(t *testing.T) {
 	if m.playingIdx != -1 {
 		t.Fatalf("fixture playingIdx = %d, want -1", m.playingIdx)
 	}
-	updated, _ := m.Update(PlaybackStartedMsg{})
+	updated, _ := m.Update(PlaybackStartedMsg{RequestID: m.playRequestID})
 	m = updated.(Model)
 	if m.playing || m.loading || !m.playStartedAt.IsZero() {
 		t.Fatalf("idle PlaybackStarted mutated playback state: playing=%v loading=%v started=%v", m.playing, m.loading, m.playStartedAt)
@@ -369,7 +369,7 @@ func TestView_ShowsPlayingMarker(t *testing.T) {
 
 	// Simulate mpv's PlaybackStarted event so loading clears and the
 	// status indicator transitions from spinner → ● glyph.
-	updated, _ := m.Update(PlaybackStartedMsg{})
+	updated, _ := m.Update(PlaybackStartedMsg{RequestID: m.playRequestID})
 	m = updated.(Model)
 
 	out := m.View()
@@ -381,7 +381,7 @@ func TestView_ShowsPlayingMarker(t *testing.T) {
 	}
 
 	m = send(t, m, "space") // toggle pause on the same station
-	updated, _ = m.Update(PlaybackPausedMsg{})
+	updated, _ = m.Update(PlaybackPausedMsg{RequestID: m.playRequestID})
 	m = updated.(Model)
 
 	out = m.View()
@@ -432,6 +432,47 @@ func TestPressSOpensShareModal(t *testing.T) {
 	}
 	if !strings.Contains(m.shareSnippet, "stations:") || !strings.Contains(m.shareSnippet, "name: A") {
 		t.Fatalf("share snippet missing station data:\n%s", m.shareSnippet)
+	}
+}
+
+func TestUnsavedDiscoveryStationShowsPersistentSaveAction(t *testing.T) {
+	m := fixture()
+	m.previewStation = &config.Station{Name: "Found station", URL: "https://found", Kind: config.KindStream}
+	m.previewUUID = "found-id"
+	m.playing = true
+	m.playingIdx = -1
+
+	if out := m.renderNowPlaying(); !strings.Contains(out, "Radio Browser") || !strings.Contains(out, "not saved") || !strings.Contains(out, "s save") {
+		t.Fatalf("now-playing view does not expose the unsaved station action:\n%s", out)
+	}
+	if out := m.renderBottomHelp(200); !strings.Contains(out, "s/p") || !strings.Contains(out, "save/paste") {
+		t.Fatalf("bottom help does not expose contextual save action:\n%s", out)
+	}
+}
+
+func TestPressSSavesActiveUnsavedDiscoveryStation(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := fixture()
+	m.previewStation = &config.Station{Name: "Found station", URL: "https://found", Kind: config.KindStream}
+	m.previewUUID = "found-id"
+	m.playing = true
+	m.playingIdx = -1
+
+	m = send(t, m, "s")
+	if m.mode != modeFull || len(m.cfg.Stations) != 4 || m.cfg.Stations[3].URL != "https://found" {
+		t.Fatalf("s did not save the active discovery station: mode=%v stations=%#v", m.mode, m.cfg.Stations)
+	}
+	if m.previewStation != nil || m.playingIdx != 3 {
+		t.Fatalf("saved discovery station was not promoted: preview=%#v idx=%d", m.previewStation, m.playingIdx)
+	}
+	if m.toast == nil || m.toast.Kind != ToastSuccess || m.toast.Message != "Saved Found station to your library." {
+		t.Fatalf("missing saved confirmation: %#v", m.toast)
+	}
+	if out := m.renderNowPlaying(); strings.Contains(out, "not saved") {
+		t.Fatalf("unsaved action remained after save:\n%s", out)
+	}
+	if out := m.renderBottomHelp(200); !strings.Contains(out, "share/import") {
+		t.Fatalf("bottom help did not return to share action:\n%s", out)
 	}
 }
 
@@ -647,8 +688,8 @@ func TestAmbientSaveErrorSurfacesAsToast(t *testing.T) {
 	if m.toast == nil || m.toast.Kind != ToastError {
 		t.Fatalf("expected error toast, got %+v", m.toast)
 	}
-	if !strings.Contains(m.toast.Message, "disk full") {
-		t.Errorf("toast message missing wrapped err: %q", m.toast.Message)
+	if m.toast.Message != "Could not save ambient mixer settings." || strings.Contains(m.toast.Message, "disk full") {
+		t.Errorf("toast message leaked or changed internal error: %q", m.toast.Message)
 	}
 }
 

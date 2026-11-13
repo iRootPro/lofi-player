@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -33,7 +34,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
 			if err := m.saveAmbient(m.mixer.Volumes()); err != nil {
 				m.toast = &Toast{
-					Message: fmt.Sprintf("ambient state save failed: %v", err),
+					Message: "Could not save ambient mixer settings.",
 					Kind:    ToastError,
 				}
 				return m, clearToastAfter()
@@ -52,16 +53,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nowTime = tick.At
 		return m, clockTick()
 	case reconnectStreamMsg:
-		if tick.seq != m.reconnectSeq || !m.bufferingStalled || !m.playing || m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+		station, active := m.activeStation()
+		if tick.seq != m.reconnectSeq || !m.bufferingStalled || !m.playing || !active {
 			return m, nil
 		}
 		m.loading = true
+		requestID := m.nextPlayRequestID()
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
 		m.playStartedAt = time.Time{}
 		m.toast = &Toast{Message: "reconnecting stream…", Kind: ToastInfo}
-		return m, tea.Batch(playCmd(m.player, m.cfg.Stations[m.playingIdx].URL), clearToastAfter())
+		return m, tea.Batch(playCmd(m.player, station.URL, requestID), clearToastAfter())
+	case discoverySearchTickMsg:
+		if tick.session != m.discovery.session || tick.seq != m.discovery.searchSeq || tick.query != m.discovery.input.Value() || m.mode != modeDiscovery {
+			return m, nil
+		}
+		if m.discoveryClient == nil {
+			m.discovery.err = "Radio Browser is unavailable"
+			return m, nil
+		}
+		m.discovery.loading = true
+		m.discovery.err = ""
+		return m, discoverySearchCmd(m.discoveryClient, tick.session, tick.seq, tick.query)
+	case discoverySearchResultMsg:
+		if tick.session != m.discovery.session || tick.seq != m.discovery.searchSeq || m.mode != modeDiscovery {
+			return m, nil
+		}
+		m.discovery.loading = false
+		if tick.err != nil {
+			m.discovery.results = nil
+			m.discovery.cursor = 0
+			m.discovery.cached = false
+			m.discovery.err = discoveryErrorMessage(tick.err)
+			return m, nil
+		}
+		m.discovery.results = tick.results.Stations
+		m.discovery.cursor = 0
+		m.discovery.cached = tick.results.Cached
+		m.discovery.err = ""
+		return m, nil
 	case clearToastMsg:
 		m.toast = nil
 		return m, nil
@@ -69,7 +100,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tick.Err != nil {
 			// Keep the share modal open so the visible YAML remains available
 			// for manual copying when the host clipboard is unavailable.
-			m.toast = &Toast{Message: fmt.Sprintf("clipboard unavailable: %v", tick.Err), Kind: ToastError}
+			m.toast = &Toast{Message: "Clipboard is unavailable. Copy the station text manually.", Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.mode = m.modePrev
@@ -78,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, clearToastAfter()
 	case importClipboardMsg:
 		if tick.Err != nil {
-			m.toast = &Toast{Message: fmt.Sprintf("import failed: %v", tick.Err), Kind: ToastError}
+			m.toast = &Toast{Message: "Could not import stations. Check the copied station data.", Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.importStations, m.importSkipped = m.newStationsOnly(tick.Stations)
@@ -90,28 +121,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mode = modeImportStations
 		return m, nil
 	}
-	// Modal states intercept input first so the form can capture text
-	// without the global keymap stealing characters like 'q'.
-	if m.mode == modeAddStation {
+	// Modal states intercept ordinary UI input first so forms can capture text
+	// without the global keymap stealing characters like 'q'. Audio events are
+	// deliberately exempt: a preview may start while discovery is open, and the
+	// event subscription must stay alive rather than being swallowed by a form.
+	if !isAudioEventMsg(msg) && m.mode == modeAddStation {
 		return m.updateAddStation(msg)
 	}
-	if m.mode == modeMixer {
+	if !isAudioEventMsg(msg) && m.mode == modeMixer {
 		return m.updateMixer(msg)
 	}
-	if m.mode == modeConfirmDelete {
+	if !isAudioEventMsg(msg) && m.mode == modeConfirmDelete {
 		return m.updateConfirmDelete(msg)
 	}
-	if m.mode == modeShareStation {
+	if !isAudioEventMsg(msg) && m.mode == modeShareStation {
 		return m.updateShareStation(msg)
 	}
-	if m.mode == modeImportStations {
+	if !isAudioEventMsg(msg) && m.mode == modeImportStations {
 		return m.updateImportStations(msg)
 	}
-	if m.mode == modeThemePicker {
+	if !isAudioEventMsg(msg) && m.mode == modeThemePicker {
 		return m.updateThemePicker(msg)
 	}
-	if m.mode == modeSettings {
+	if !isAudioEventMsg(msg) && m.mode == modeSettings {
 		return m.updateSettings(msg)
+	}
+	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDiscovery {
+		return m.updateDiscovery(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -124,14 +160,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case MetadataChangedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.currentTrack = Track{Title: msg.Title, Artist: msg.Artist}
 		return m, waitForEvent(m.player)
 
 	case PlaybackStartedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		// mpv can emit pause=false while idle (for example if a hardware
 		// media key is pressed before any station has been loaded). Do not
 		// let that phantom event make the TUI claim something is playing.
-		if m.playingIdx < 0 || m.playingIdx >= len(m.cfg.Stations) {
+		if !m.hasActiveStation() {
 			m.playing = false
 			m.loading = false
 			m.bufferingStalled = false
@@ -150,7 +192,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, waitForEvent(m.player)
 
+	case PlaybackLoadStartedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
+		return m, waitForEvent(m.player)
+
 	case PlaybackPausedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.playing = false
 		m.loading = false
 		m.bufferingStalled = false
@@ -158,10 +209,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.player)
 
 	case PlaybackErrorMsg:
-		m.toast = &Toast{Message: msg.Err.Error(), Kind: ToastError}
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
+		m.toast = &Toast{Message: "Could not play this station. Try another one.", Kind: ToastError}
 		m.playing = false
 		m.loading = false
 		m.playingIdx = -1
+		m.previewStation = nil
+		m.previewUUID = ""
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
@@ -171,9 +227,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
 	case EOFMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.playing = false
 		m.loading = false
 		m.playingIdx = -1
+		m.previewStation = nil
+		m.previewUUID = ""
 		m.currentTrack = Track{}
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
@@ -183,6 +244,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.player)
 
 	case StreamInfoChangedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.streamInfo = audio.StreamInfoChanged{
 			Bitrate:    msg.Bitrate,
 			Codec:      msg.Codec,
@@ -192,10 +256,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.player)
 
 	case CacheStateChangedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.cacheSeconds = msg.Seconds
 		return m, waitForEvent(m.player)
 
 	case BufferingChangedMsg:
+		if msg.RequestID != m.playRequestID {
+			return m, waitForEvent(m.player)
+		}
 		m.bufferingStalled = msg.Stalled
 		if !msg.Stalled {
 			m.reconnectSeq++
@@ -204,7 +274,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// paused-for-cache also happens during initial buffering. Only arm
 		// the self-heal watchdog after a station was already playing; slow
 		// startup should keep buffering instead of reload-looping.
-		if m.playing && !m.loading && m.playingIdx >= 0 && m.playingIdx < len(m.cfg.Stations) {
+		if m.playing && !m.loading && m.hasActiveStation() {
 			m.reconnectSeq++
 			seq := m.reconnectSeq
 			m.toast = &Toast{Message: "stream stalled — reconnecting if it does not recover", Kind: ToastInfo}
@@ -218,7 +288,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// playingIdx / streamInfo / playStartedAt the way
 		// PlaybackErrorMsg does.
 		m.toast = &Toast{
-			Message: fmt.Sprintf("%s failed: %v", msg.Action, msg.Err),
+			Message: "Could not " + msg.Action + ". Try again.",
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
@@ -294,6 +364,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Tell bubbles/textinput to start its cursor blink.
 		return m, m.addForm.name.Cursor.BlinkCmd()
 
+	case key.Matches(msg, m.keys.Discovery):
+		m.modePrev = m.mode
+		m.mode = modeDiscovery
+		m.discoverySession++
+		m.discovery = newDiscoveryModel(m.discoverySession)
+		return m, m.discovery.input.Cursor.BlinkCmd()
+
 	case key.Matches(msg, m.keys.EditStation):
 		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
 			return m, nil
@@ -313,12 +390,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.ShareStation):
+		if m.previewStation != nil {
+			return m.savePlayingDiscoveryStation()
+		}
 		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
 			return m, nil
 		}
 		snippet, err := sharepkg.MarshalStation(m.cfg.Stations[m.cursor])
 		if err != nil {
-			m.toast = &Toast{Message: fmt.Sprintf("share failed: %v", err), Kind: ToastError}
+			m.toast = &Toast{Message: "Could not prepare this station for sharing.", Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.modePrev = m.mode
@@ -346,6 +426,188 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func isAudioEventMsg(msg tea.Msg) bool {
+	switch msg.(type) {
+	case MetadataChangedMsg, PlaybackLoadStartedMsg, PlaybackStartedMsg, PlaybackPausedMsg,
+		PlaybackErrorMsg, EOFMsg, StreamInfoChangedMsg, CacheStateChangedMsg,
+		BufferingChangedMsg, CommandFailedMsg:
+		return true
+	default:
+		return false
+	}
+}
+
+// isGlobalModelMsg identifies framework messages that must reach the root
+// update loop even while a modal owns keyboard input. In particular, spinner
+// ticks keep the discovery Play feedback animated and schedule the next tick;
+// window-size updates keep the overlay aligned after a terminal resize.
+func isGlobalModelMsg(msg tea.Msg) bool {
+	switch msg.(type) {
+	case spinner.TickMsg, tea.WindowSizeMsg:
+		return true
+	default:
+		return false
+	}
+}
+
+// updateDiscovery owns the public directory modal. Text stays in the input
+// while it has focus; Down enters results and Up from the first result returns
+// to the input. Tab remains an alternate focus switch.
+func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, isKey := msg.(tea.KeyMsg)
+	if isKey {
+		switch km.String() {
+		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.mode = m.modePrev
+			return m, nil
+		case "tab", "shift+tab":
+			next := discoveryResultsFocus
+			if m.discovery.focus == discoveryResultsFocus {
+				next = discoveryInputFocus
+			}
+			m.discovery = m.discovery.setFocus(next)
+			if m.discovery.focus == discoveryInputFocus {
+				return m, m.discovery.input.Cursor.BlinkCmd()
+			}
+			return m, nil
+		}
+
+		if m.discovery.focus == discoveryResultsFocus {
+			switch km.String() {
+			case "j", "down":
+				if m.discovery.cursor < len(m.discovery.results)-1 {
+					m.discovery.cursor++
+				}
+				return m, nil
+			case "k", "up":
+				if m.discovery.cursor > 0 {
+					m.discovery.cursor--
+					return m, nil
+				}
+				m.discovery = m.discovery.setFocus(discoveryInputFocus)
+				return m, m.discovery.input.Cursor.BlinkCmd()
+			case "enter":
+				return m.previewDiscovery()
+			case "s":
+				return m.saveDiscoveryStation()
+			}
+		}
+		// Keep printable j/k available to type queries such as "jazz".
+		// The Down arrow, unlike a rune key, is an unambiguous request to
+		// enter the result list once one is available.
+		if m.discovery.focus == discoveryInputFocus && km.String() == "down" && len(m.discovery.results) > 0 {
+			m.discovery = m.discovery.setFocus(discoveryResultsFocus)
+			return m, nil
+		}
+	}
+
+	if m.discovery.focus != discoveryInputFocus {
+		return m, nil
+	}
+	before := m.discovery.input.Value()
+	var cmd tea.Cmd
+	m.discovery.input, cmd = m.discovery.input.Update(msg)
+	if m.discovery.input.Value() == before {
+		return m, cmd
+	}
+	m.discovery.searchSeq++
+	m.discovery.results = nil
+	m.discovery.cursor = 0
+	m.discovery.loading = false
+	m.discovery.cached = false
+	m.discovery.err = ""
+	m.discovery.notice = ""
+	query := m.discovery.input.Value()
+	if len([]rune(strings.TrimSpace(query))) < discoveryMinQueryRunes {
+		return m, cmd
+	}
+	return m, tea.Batch(cmd, discoverySearchTick(m.discovery.session, m.discovery.searchSeq, query))
+}
+
+func (m Model) previewDiscovery() (tea.Model, tea.Cmd) {
+	station, ok := m.discovery.selected()
+	if !ok {
+		return m, nil
+	}
+	preview := config.Station{Name: station.Name, URL: station.StreamURL, Kind: config.KindStream}
+	m.previewStation = &preview
+	m.previewUUID = station.UUID
+	m.playingIdx = -1
+	m.playing = true
+	m.loading = true
+	requestID := m.nextPlayRequestID()
+	m.currentTrack = Track{}
+	m.streamInfo = audio.StreamInfoChanged{}
+	m.cacheSeconds = 0
+	m.bufferingStalled = false
+	m.reconnectSeq++
+	m.playStartedAt = time.Time{}
+	return m, tea.Batch(playCmd(m.player, preview.URL, requestID), discoveryClickCmd(m.discoveryClient, station.UUID))
+}
+
+// saveDiscoveryStation persists the selected public result only after an
+// explicit save action. It deliberately writes a copy first: if config.Save
+// fails, the live library stays untouched and preview remains transient.
+func (m Model) saveDiscoveryStation() (tea.Model, tea.Cmd) {
+	station, ok := m.discovery.selected()
+	if !ok {
+		return m, nil
+	}
+	m, message, kind := m.saveDiscoveredStation(station.Name, station.StreamURL)
+	m.discovery.notice = message
+	m.discovery.noticeKind = kind
+	return m, nil
+}
+
+// savePlayingDiscoveryStation lets the user save a transient Radio Browser
+// station after leaving discovery. It intentionally targets the active stream,
+// not the library cursor, so navigation cannot save the wrong station.
+func (m Model) savePlayingDiscoveryStation() (tea.Model, tea.Cmd) {
+	if m.previewStation == nil {
+		return m, nil
+	}
+	preview := *m.previewStation
+	m, message, kind := m.saveDiscoveredStation(preview.Name, preview.URL)
+	m.toast = &Toast{Message: message, Kind: kind}
+	return m, clearToastAfter()
+}
+
+// saveDiscoveredStation is the shared persistence path for a selected catalog
+// result and for the active unsaved station after discovery closes.
+func (m Model) saveDiscoveredStation(name, streamURL string) (Model, string, ToastKind) {
+	for i, existing := range m.cfg.Stations {
+		if existing.URL != streamURL {
+			continue
+		}
+		m.cursor = i
+		m.promotePreviewIfMatches(i, streamURL)
+		return m, "Already in your library: " + existing.Name, ToastInfo
+	}
+
+	added := config.Station{Name: name, URL: streamURL, Kind: config.KindStream}
+	stations := append(append([]config.Station(nil), m.cfg.Stations...), added)
+	candidate := *m.cfg
+	candidate.Stations = stations
+	if err := config.Save(&candidate); err != nil {
+		return m, "Could not save this station. Check your config directory permissions.", ToastError
+	}
+	m.cfg.Stations = stations
+	m.cursor = len(stations) - 1
+	m.promotePreviewIfMatches(m.cursor, added.URL)
+	return m, "Saved " + added.Name + " to your library.", ToastSuccess
+}
+
+func (m *Model) promotePreviewIfMatches(idx int, streamURL string) {
+	if m.previewStation == nil || m.previewStation.URL != streamURL {
+		return
+	}
+	m.playingIdx = idx
+	m.previewStation = nil
+	m.previewUUID = ""
 }
 
 // updateAddStation routes input to the add/edit station modal form.
@@ -379,7 +641,7 @@ func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: fmt.Sprintf("station %s in memory but config save failed: %v", verb, err),
+			Message: "Could not save your station changes. Check your config directory permissions.",
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
@@ -482,7 +744,7 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cfg.InitialBufferSeconds = m.settingsInitialBufferSeconds
 		m.mode = m.modePrev
 		if err := config.Save(m.cfg); err != nil {
-			m.toast = &Toast{Message: fmt.Sprintf("settings saved in memory but config save failed: %v", err), Kind: ToastError}
+			m.toast = &Toast{Message: "Could not save settings. Check your config directory permissions.", Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.toast = &Toast{Message: "settings saved — restart to apply buffer changes", Kind: ToastSuccess}
@@ -544,7 +806,7 @@ func (m Model) updateThemePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.themeBeforePicker = ""
 		if m.saveTheme != nil {
 			if err := m.saveTheme(name); err != nil {
-				m.toast = &Toast{Message: fmt.Sprintf("theme selected but state save failed: %v", err), Kind: ToastError}
+				m.toast = &Toast{Message: "Could not save the selected theme.", Kind: ToastError}
 				return m, clearToastAfter()
 			}
 		}
@@ -597,7 +859,7 @@ func (m Model) commitImport() (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: fmt.Sprintf("imported in memory but config save failed: %v", err),
+			Message: "Could not save imported stations. Check your config directory permissions.",
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
@@ -695,7 +957,7 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: fmt.Sprintf("removed in memory but config save failed: %v", err),
+			Message: "Could not save the station removal. Check your config directory permissions.",
 			Kind:    ToastError,
 		}
 		return m, tea.Batch(clearToastAfter(), cmd)
@@ -712,6 +974,33 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 // optimistic — the actual confirmation arrives via the audio event
 // subscription, which may correct us if mpv disagrees.
 func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
+	if m.previewStation != nil {
+		// The library cursor remains where it was while a transient result
+		// previews. Selecting another saved station and pressing space must
+		// replace preview rather than merely pause/resume it.
+		if m.cursor >= 0 && m.cursor < len(m.cfg.Stations) && m.cfg.Stations[m.cursor].URL != m.previewStation.URL {
+			m.previewStation = nil
+			m.previewUUID = ""
+		} else {
+			if m.playing {
+				m.playing = false
+				m.loading = false
+				m.bufferingStalled = false
+				m.reconnectSeq++
+				return m, pauseCmd(m.player)
+			}
+			m.playing = true
+			m.loading = true
+			requestID := m.nextPlayRequestID()
+			m.bufferingStalled = false
+			m.reconnectSeq++
+			m.currentTrack = Track{}
+			m.streamInfo = audio.StreamInfoChanged{}
+			m.cacheSeconds = 0
+			m.playStartedAt = time.Time{}
+			return m, playCmd(m.player, m.previewStation.URL, requestID)
+		}
+	}
 	if len(m.cfg.Stations) == 0 {
 		return m, nil
 	}
@@ -743,11 +1032,12 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 		m.reconnectSeq++
 		if !m.cfg.Stations[m.cursor].IsYouTube() {
 			m.loading = true
+			requestID := m.nextPlayRequestID()
 			m.currentTrack = Track{}
 			m.streamInfo = audio.StreamInfoChanged{}
 			m.cacheSeconds = 0
 			m.playStartedAt = time.Time{}
-			return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
+			return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL, requestID)
 		}
 		return m, resumeCmd(m.player)
 	}
@@ -757,13 +1047,14 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.playingIdx = m.cursor
 	m.playing = true
 	m.loading = true
+	requestID := m.nextPlayRequestID()
 	m.currentTrack = Track{}
 	m.streamInfo = audio.StreamInfoChanged{}
 	m.cacheSeconds = 0
 	m.bufferingStalled = false
 	m.reconnectSeq++
 	m.playStartedAt = time.Time{}
-	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL)
+	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL, requestID)
 }
 
 // updateMixer routes input while the ambient mixer modal is open.

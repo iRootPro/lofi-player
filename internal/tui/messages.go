@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 )
 
 // Bridge messages between internal/audio events and the Bubble Tea
@@ -12,8 +13,9 @@ import (
 
 // MetadataChangedMsg carries a fresh ICY (or media-title) update.
 type MetadataChangedMsg struct {
-	Title  string
-	Artist string
+	Title     string
+	Artist    string
+	RequestID uint64
 }
 
 // StreamInfoChangedMsg carries technical info reported by mpv: bitrate,
@@ -24,19 +26,22 @@ type StreamInfoChangedMsg struct {
 	Codec      string
 	SampleRate int
 	Channels   int
+	RequestID  uint64
 }
 
 // CacheStateChangedMsg carries the demuxer's buffered-ahead duration in
 // seconds. Coalesced upstream: only delivered when the value moves past
 // a quarter-second threshold so the event channel stays quiet.
 type CacheStateChangedMsg struct {
-	Seconds float64
+	Seconds   float64
+	RequestID uint64
 }
 
 // BufferingChangedMsg reports that mpv is internally paused waiting for
 // cache/network data. If it stays true, the UI can reload the live stream.
 type BufferingChangedMsg struct {
-	Stalled bool
+	Stalled   bool
+	RequestID uint64
 }
 
 // reconnectStreamMsg is fired by a delayed watchdog after a sustained
@@ -44,16 +49,21 @@ type BufferingChangedMsg struct {
 type reconnectStreamMsg struct{ seq int }
 
 // PlaybackStartedMsg fires when mpv unpauses.
-type PlaybackStartedMsg struct{}
+type PlaybackStartedMsg struct{ RequestID uint64 }
+
+// PlaybackLoadStartedMsg fires when mpv begins opening a newly loaded file.
+// It marks the boundary after which EOF/error belongs to the requested source.
+type PlaybackLoadStartedMsg struct{ RequestID uint64 }
 
 // PlaybackPausedMsg fires when mpv enters paused state.
-type PlaybackPausedMsg struct{}
+type PlaybackPausedMsg struct{ RequestID uint64 }
 
 // PlaybackErrorMsg surfaces a recoverable playback failure (DNS, 404,
 // network drop). The TUI shows it as a transient message in the
 // help-bar slot and auto-clears after a few seconds.
 type PlaybackErrorMsg struct {
-	Err error
+	Err       error
+	RequestID uint64
 }
 
 // CommandFailedMsg fires when a one-shot mpv command (set_property
@@ -68,7 +78,7 @@ type CommandFailedMsg struct {
 
 // EOFMsg fires when a stream ends. For live streams this normally only
 // happens when the server shuts down.
-type EOFMsg struct{}
+type EOFMsg struct{ RequestID uint64 }
 
 // clearToastMsg is delivered by a delayed tea.Tick to wipe an active
 // Toast after its lifetime expires.
@@ -83,6 +93,23 @@ type shareCopiedMsg struct{ Err error }
 type importClipboardMsg struct {
 	Stations []config.Station
 	Err      error
+}
+
+// discoverySearchTickMsg starts the debounced Radio Browser request. seq
+// prevents an old tick from searching after the input changed again.
+type discoverySearchTickMsg struct {
+	session int
+	seq     int
+	query   string
+}
+
+// discoverySearchResultMsg is the asynchronous result of one search. seq
+// prevents a late network response from replacing newer results.
+type discoverySearchResultMsg struct {
+	session int
+	seq     int
+	results radiobrowser.Results
+	err     error
 }
 
 // pulseTickMsg toggles the live indicator's brightness for a soft

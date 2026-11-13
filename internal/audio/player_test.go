@@ -135,6 +135,93 @@ func TestTranslateOne_EndFileEOF(t *testing.T) {
 	}
 }
 
+func TestTranslateOne_StartFile(t *testing.T) {
+	p := &Player{}
+	e := p.translateOne(ipcEvent{Event: "start-file"})
+	if _, ok := e.(PlaybackLoadStarted); !ok {
+		t.Errorf("start-file: got %T, want PlaybackLoadStarted", e)
+	}
+}
+
+func TestTranslateOneCorrelatesLifecycleEventsWithLoadRequests(t *testing.T) {
+	p := &Player{pendingPlayRequests: []uint64{11, 12}}
+	first, ok := p.translateOne(ipcEvent{Event: "start-file"}).(PlaybackLoadStarted)
+	if !ok || first.RequestID != 11 {
+		t.Fatalf("first start-file = %#v", first)
+	}
+	oldEOF, ok := p.translateOne(ipcEvent{Event: "end-file", Reason: "eof"}).(EOF)
+	if !ok || oldEOF.RequestID != 11 {
+		t.Fatalf("old EOF = %#v", oldEOF)
+	}
+	second, ok := p.translateOne(ipcEvent{Event: "start-file"}).(PlaybackLoadStarted)
+	if !ok || second.RequestID != 12 {
+		t.Fatalf("second start-file = %#v", second)
+	}
+	currentError, ok := p.translateOne(ipcEvent{Event: "end-file", Reason: "error"}).(PlaybackError)
+	if !ok || currentError.RequestID != 12 {
+		t.Fatalf("current error = %#v", currentError)
+	}
+}
+
+func TestStartFileResetsDeduplicationForNewPlayRequest(t *testing.T) {
+	p := &Player{activePlayRequest: 1}
+	if !p.queuePlayRequest(2) {
+		t.Fatal("new request was rejected")
+	}
+
+	metadata := ipcEvent{Event: "property-change", Name: "metadata", Data: json.RawMessage(`{"icy-title":"Artist - Title"}`)}
+	bitrate := ipcEvent{Event: "property-change", Name: "audio-bitrate", Data: json.RawMessage(`128000`)}
+	cache := ipcEvent{Event: "property-change", Name: "demuxer-cache-state", Data: json.RawMessage(`{"cache-duration":5}`)}
+	for _, raw := range []ipcEvent{metadata, bitrate, cache} {
+		if event := p.translateOne(raw); event == nil {
+			t.Fatalf("old request property %q produced no event", raw.Name)
+		}
+	}
+
+	started, ok := p.translateOne(ipcEvent{Event: "start-file"}).(PlaybackLoadStarted)
+	if !ok || started.RequestID != 2 {
+		t.Fatalf("start-file = %#v, want request 2", started)
+	}
+
+	// The new stream may report the same values. They must still reach the TUI
+	// with request 2 rather than being suppressed by request 1's dedup cache.
+	for _, raw := range []ipcEvent{metadata, bitrate, cache} {
+		event := p.translateOne(raw)
+		if event == nil {
+			t.Fatalf("new request property %q was incorrectly deduplicated", raw.Name)
+		}
+		switch e := event.(type) {
+		case MetadataChanged:
+			if e.RequestID != 2 {
+				t.Fatalf("metadata request = %d, want 2", e.RequestID)
+			}
+		case StreamInfoChanged:
+			if e.RequestID != 2 {
+				t.Fatalf("stream info request = %d, want 2", e.RequestID)
+			}
+		case CacheStateChanged:
+			if e.RequestID != 2 {
+				t.Fatalf("cache request = %d, want 2", e.RequestID)
+			}
+		default:
+			t.Fatalf("property %q produced %T", raw.Name, event)
+		}
+	}
+}
+
+func TestQueuePlayRequestRejectsOutOfOrderCommand(t *testing.T) {
+	p := &Player{}
+	if !p.queuePlayRequest(2) {
+		t.Fatal("new request was rejected")
+	}
+	if p.queuePlayRequest(1) {
+		t.Fatal("stale request was accepted")
+	}
+	if got := p.pendingPlayRequests; len(got) != 1 || got[0] != 2 {
+		t.Fatalf("pending requests = %#v", got)
+	}
+}
+
 func TestTranslateOne_EndFileError(t *testing.T) {
 	p := &Player{}
 	e := p.translateOne(ipcEvent{Event: "end-file", Reason: "error"})

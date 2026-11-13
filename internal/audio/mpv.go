@@ -31,6 +31,10 @@ type ipcClient struct {
 	pending sync.Map // int64 -> chan ipcResponse
 
 	events    chan ipcEvent
+	eventMu   sync.Mutex
+	eventQ    []ipcEvent
+	eventWake chan struct{}
+	eventDone chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
 	closeErr  error
@@ -77,10 +81,13 @@ func newIPC(conn net.Conn) *ipcClient {
 
 func newIPCWithBuf(conn net.Conn, maxBuf int) *ipcClient {
 	c := &ipcClient{
-		conn:   conn,
-		events: make(chan ipcEvent, 64),
-		done:   make(chan struct{}),
+		conn:      conn,
+		events:    make(chan ipcEvent, 64),
+		eventWake: make(chan struct{}, 1),
+		eventDone: make(chan struct{}),
+		done:      make(chan struct{}),
 	}
+	go c.dispatchEvents()
 	go c.readLoop(maxBuf)
 	return c
 }
@@ -156,7 +163,7 @@ func (c *ipcClient) close() error {
 }
 
 func (c *ipcClient) readLoop(maxBuf int) {
-	defer close(c.events)
+	defer close(c.eventDone)
 	scanner := bufio.NewScanner(c.conn)
 	scanner.Buffer(make([]byte, 64*1024), maxBuf)
 
@@ -180,20 +187,7 @@ func (c *ipcClient) readLoop(maxBuf int) {
 				Data:   msg.Data,
 				Reason: msg.Reason,
 			}
-			// Do not let event backpressure starve command responses. Some
-			// streams (notably YouTube via ytdl_hook) can emit bursts of
-			// property changes while loading or buffering; if the TUI is not
-			// draining events fast enough, blocking here prevents this read loop
-			// from reaching later request_id responses and harmless commands like
-			// set volume time out with context deadline exceeded. Dropping an
-			// over-capacity event is preferable: observed properties are state
-			// snapshots and mpv will send another update soon.
-			select {
-			case c.events <- evt:
-			case <-c.done:
-				return
-			default:
-			}
+			c.enqueueEvent(evt)
 		case msg.RequestID != 0:
 			if ch, ok := c.pending.LoadAndDelete(msg.RequestID); ok {
 				ch.(chan ipcResponse) <- ipcResponse{
@@ -202,6 +196,67 @@ func (c *ipcClient) readLoop(maxBuf int) {
 					Error:     msg.Error,
 				}
 			}
+		}
+	}
+}
+
+// enqueueEvent separates socket reading from consumer backpressure, so command
+// responses are never starved by a burst of observed properties. Snapshot
+// property events may be discarded once queued work is full; lifecycle events
+// are never dropped because playback state depends on their ordering.
+func (c *ipcClient) enqueueEvent(evt ipcEvent) {
+	critical := isLifecycleEvent(evt)
+	c.eventMu.Lock()
+	if critical || len(c.eventQ) < cap(c.events) {
+		c.eventQ = append(c.eventQ, evt)
+	}
+	c.eventMu.Unlock()
+	select {
+	case c.eventWake <- struct{}{}:
+	default:
+	}
+}
+
+func isLifecycleEvent(evt ipcEvent) bool {
+	if evt.Event == "start-file" || evt.Event == "end-file" || evt.Event == "playback-restart" {
+		return true
+	}
+	return evt.Event == "property-change" && evt.Name == "pause"
+}
+
+func (c *ipcClient) popQueuedEvent() (ipcEvent, bool) {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
+	if len(c.eventQ) == 0 {
+		return ipcEvent{}, false
+	}
+	evt := c.eventQ[0]
+	c.eventQ[0] = ipcEvent{}
+	c.eventQ = c.eventQ[1:]
+	return evt, true
+}
+
+func (c *ipcClient) dispatchEvents() {
+	defer close(c.events)
+	inputClosed := false
+	for {
+		if evt, ok := c.popQueuedEvent(); ok {
+			select {
+			case c.events <- evt:
+			case <-c.done:
+				return
+			}
+			continue
+		}
+		if inputClosed {
+			return
+		}
+		select {
+		case <-c.eventWake:
+		case <-c.eventDone:
+			inputClosed = true
+		case <-c.done:
+			return
 		}
 	}
 }

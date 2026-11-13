@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"context"
 	"time"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
+	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 )
 
@@ -14,13 +16,15 @@ import (
 // dismisses it.
 const toastLifetime = 3 * time.Second
 
+const discoverySearchDebounce = 350 * time.Millisecond
+
 // playCmd starts (or replaces) playback of url. A nil result means the
 // command succeeded and the actual "started playing" signal will arrive
 // later via the audio event subscription.
-func playCmd(p *audio.Player, url string) tea.Cmd {
+func playCmd(p *audio.Player, url string, requestID uint64) tea.Cmd {
 	return func() tea.Msg {
-		if err := p.Play(url); err != nil {
-			return PlaybackErrorMsg{Err: err}
+		if err := p.Play(url, requestID); err != nil {
+			return PlaybackErrorMsg{Err: err, RequestID: requestID}
 		}
 		return nil
 	}
@@ -71,26 +75,29 @@ func waitForEvent(p *audio.Player) tea.Cmd {
 		}
 		switch e := evt.(type) {
 		case audio.MetadataChanged:
-			return MetadataChangedMsg{Title: e.Title, Artist: e.Artist}
+			return MetadataChangedMsg{Title: e.Title, Artist: e.Artist, RequestID: e.RequestID}
 		case audio.PlaybackStarted:
-			return PlaybackStartedMsg{}
+			return PlaybackStartedMsg{RequestID: e.RequestID}
+		case audio.PlaybackLoadStarted:
+			return PlaybackLoadStartedMsg{RequestID: e.RequestID}
 		case audio.PlaybackPaused:
-			return PlaybackPausedMsg{}
+			return PlaybackPausedMsg{RequestID: e.RequestID}
 		case audio.PlaybackError:
-			return PlaybackErrorMsg{Err: e.Err}
+			return PlaybackErrorMsg{Err: e.Err, RequestID: e.RequestID}
 		case audio.EOF:
-			return EOFMsg{}
+			return EOFMsg{RequestID: e.RequestID}
 		case audio.StreamInfoChanged:
 			return StreamInfoChangedMsg{
 				Bitrate:    e.Bitrate,
 				Codec:      e.Codec,
 				SampleRate: e.SampleRate,
 				Channels:   e.Channels,
+				RequestID:  e.RequestID,
 			}
 		case audio.CacheStateChanged:
-			return CacheStateChangedMsg{Seconds: e.Seconds}
+			return CacheStateChangedMsg{Seconds: e.Seconds, RequestID: e.RequestID}
 		case audio.BufferingChanged:
-			return BufferingChangedMsg{Stalled: e.Stalled}
+			return BufferingChangedMsg{Stalled: e.Stalled, RequestID: e.RequestID}
 		}
 		return nil
 	}
@@ -117,6 +124,31 @@ func importClipboardCmd() tea.Cmd {
 		}
 		stations, err := sharepkg.Parse(text)
 		return importClipboardMsg{Stations: stations, Err: err}
+	}
+}
+
+func discoverySearchTick(session, seq int, query string) tea.Cmd {
+	return tea.Tick(discoverySearchDebounce, func(time.Time) tea.Msg {
+		return discoverySearchTickMsg{session: session, seq: seq, query: query}
+	})
+}
+
+func discoverySearchCmd(client radiobrowser.Client, session, seq int, query string) tea.Cmd {
+	return func() tea.Msg {
+		results, err := client.Search(context.Background(), query)
+		return discoverySearchResultMsg{session: session, seq: seq, results: results, err: err}
+	}
+}
+
+// discoveryClickCmd deliberately returns no message: click reporting is
+// best-effort telemetry requested by Radio Browser and must never affect
+// playback or the visible TUI state.
+func discoveryClickCmd(client radiobrowser.Client, stationUUID string) tea.Cmd {
+	return func() tea.Msg {
+		if client != nil && stationUUID != "" {
+			_ = client.RegisterClick(context.Background(), stationUUID)
+		}
+		return nil
 	}
 }
 
