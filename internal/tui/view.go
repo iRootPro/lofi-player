@@ -104,7 +104,7 @@ func (m Model) View() string {
 		content = inner.viewFull()
 	}
 
-	title := iconLogo + " lofi.player"
+	title := inner.renderTitle(frameWidth)
 	rightLabel := inner.renderTopRight(frameWidth)
 	bottomLabel := inner.renderBottomHelp(frameWidth)
 
@@ -925,6 +925,28 @@ func (m Model) renderTopRight(frameWidth int) string {
 		return volume
 	}
 	return combined
+}
+
+// renderTitle keeps the running version visible for screenshots and support
+// requests without crowding compact terminals. renderFrame applies AppTitle to
+// the product name; the nested Hint style keeps the version secondary.
+func (m Model) renderTitle(frameWidth int) string {
+	title := iconLogo + " lofi.player"
+	if m.appVersion == "" {
+		return title
+	}
+	version := m.appVersion
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	candidate := title + " " + m.styles.Hint.Render(version)
+	// Account for the frame corners, title/right-label padding, and at least a
+	// one-cell visual gap. The version is optional metadata, so hide it before
+	// compressing the always-useful title or volume control.
+	if lipgloss.Width(candidate)+lipgloss.Width(m.renderTopRight(frameWidth))+7 >= frameWidth {
+		return title
+	}
+	return candidate
 }
 
 func (m Model) renderThemeChip() string {

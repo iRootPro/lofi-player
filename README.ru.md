@@ -86,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 
 Сам определяет OS/arch, скачивает архив из последнего релиза, кладёт
 бинарник в `~/.local/bin`. Переопределить можно через
-`INSTALL_DIR=/usr/local/bin`, заПинить версию — через `VERSION=v0.3.0`.
+`INSTALL_DIR=/usr/local/bin`, заПинить версию — через `VERSION=v0.3.1`.
 
 `mpv` (и опционально `yt-dlp`) поставь отдельно — см.
 [системные зависимости](#системные-зависимости) ниже. Инсталлер

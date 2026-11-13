@@ -134,6 +134,7 @@ func (m Model) viewDoctor() string {
 		label string
 		check doctor.Check
 	}{
+		{"application", doctor.Check{Status: doctor.StatusOK, Detail: report.Application}},
 		{"player", report.Player},
 		{"playback", report.Playback},
 		{"stream host", report.StreamHost},

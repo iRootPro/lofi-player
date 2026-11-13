@@ -106,6 +106,20 @@ func TestView_RendersWhenSized(t *testing.T) {
 	}
 }
 
+func TestView_ShowsVersionInWideTitleBarAndHidesItWhenNarrow(t *testing.T) {
+	m := fixture()
+	m.appVersion = "0.3.1"
+	if got := m.View(); !strings.Contains(got, "v0.3.1") {
+		t.Errorf("wide title bar omitted version:\n%s", got)
+	}
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 42, Height: 24})
+	m = updated.(Model)
+	if got := m.View(); strings.Contains(got, "v0.3.1") {
+		t.Errorf("narrow title bar retained optional version:\n%s", got)
+	}
+}
+
 func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
 	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	if got := m.View(); got != "" {
@@ -115,6 +129,7 @@ func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
 
 func TestDoctorModalOpensWithUppercaseDAndRendersSafeHost(t *testing.T) {
 	m := fixture()
+	m.appVersion = "0.3.1"
 	m.playingIdx = 0
 	m.playing = true
 	m.cfg.Stations[0].URL = "https://user:password@radio.example.test/private?token=secret"
@@ -123,7 +138,7 @@ func TestDoctorModalOpensWithUppercaseDAndRendersSafeHost(t *testing.T) {
 		t.Fatalf("mode after D = %v, want modeDoctor", m.mode)
 	}
 	view := m.View()
-	for _, want := range []string{"playback doctor", "radio.example.test", "copy safe report", "ok"} {
+	for _, want := range []string{"playback doctor", "application", "lofi-player 0.3.1", "radio.example.test", "copy safe report", "ok"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("doctor view missing %q:\n%s", want, view)
 		}

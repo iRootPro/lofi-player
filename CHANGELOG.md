@@ -3,6 +3,13 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-11-13
+
+### Changed
+
+- The TUI title bar now shows the running version when terminal width permits;
+  Playback Doctor also displays the application version explicitly.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added
