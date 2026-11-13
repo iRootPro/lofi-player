@@ -165,6 +165,10 @@ func defaultCacheDir() string {
 	return filepath.Join(home, ".cache", "lofi-player", "radio-browser")
 }
 
+// DefaultCacheDir returns the read/write location used by a default client for
+// cached search results. Callers that only inspect it must not create it.
+func DefaultCacheDir() string { return defaultCacheDir() }
+
 // Search queries a randomized Radio Browser mirror and writes successful
 // responses to the XDG cache. When every mirror fails, it returns the cached
 // response (marked Cached) if one exists.

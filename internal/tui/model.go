@@ -25,6 +25,8 @@ type Track struct {
 // zero value is a valid starting point: theme defaults to cfg.Theme,
 // volume to cfg.Volume, no autoplay.
 type Options struct {
+	// AppVersion is shown in the read-only Playback Doctor report.
+	AppVersion string
 	// Theme overrides cfg.Theme when non-empty (used to apply the
 	// state.json snapshot from a previous session).
 	Theme string
@@ -76,6 +78,7 @@ const (
 	modeThemePicker
 	modeSettings
 	modeDiscovery
+	modeDoctor
 )
 
 // Model is the root Bubble Tea model.
@@ -84,11 +87,12 @@ const (
 // immutable update style and pointer receivers create subtle races
 // (plan §4.2).
 type Model struct {
-	cfg    *config.Config
-	player *audio.Player
-	theme  theme.Theme
-	styles Styles
-	keys   KeyMap
+	cfg        *config.Config
+	player     *audio.Player
+	theme      theme.Theme
+	styles     Styles
+	keys       KeyMap
+	appVersion string
 
 	cursor     int
 	playingIdx int
@@ -146,6 +150,10 @@ type Model struct {
 	// carried by debounce/network messages so a late response from a closed
 	// search cannot populate a new search session with the same sequence ID.
 	discoverySession int
+	doctor           doctorModel
+	// doctorCheckSeq is monotonic across modal sessions, so a canceled check
+	// from a prior open can never update a freshly opened Doctor.
+	doctorCheckSeq int
 
 	// pendingDeleteIdx points at the station awaiting user confirmation
 	// in modeConfirmDelete. -1 outside that mode.
@@ -219,6 +227,9 @@ type Model struct {
 	// Cleared after the first render so it doesn't fire again on
 	// model rebuild.
 	startupWarning string
+	// lastPlaybackIssue keeps a deliberately generic, safe diagnosis. Raw mpv
+	// errors can embed stream URLs and must never enter a copied report.
+	lastPlaybackIssue string
 }
 
 // NewModel constructs the root model. NewModel does not take ownership
@@ -278,6 +289,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 	return Model{
 		cfg:              cfg,
 		player:           player,
+		appVersion:       opts.AppVersion,
 		theme:            t,
 		styles:           NewStyles(t),
 		keys:             DefaultKeyMap(),

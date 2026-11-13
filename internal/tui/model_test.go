@@ -10,6 +10,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/doctor"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -109,6 +110,65 @@ func TestView_EmptyBeforeFirstWindowSize(t *testing.T) {
 	m := NewModel(&config.Config{Volume: 60, Stations: []config.Station{{Name: "X"}}}, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
 	if got := m.View(); got != "" {
 		t.Errorf("View() should be empty before WindowSizeMsg, got %q", got)
+	}
+}
+
+func TestDoctorModalOpensWithUppercaseDAndRendersSafeHost(t *testing.T) {
+	m := fixture()
+	m.playingIdx = 0
+	m.playing = true
+	m.cfg.Stations[0].URL = "https://user:password@radio.example.test/private?token=secret"
+	m = send(t, m, "D")
+	if m.mode != modeDoctor {
+		t.Fatalf("mode after D = %v, want modeDoctor", m.mode)
+	}
+	view := m.View()
+	for _, want := range []string{"playback doctor", "radio.example.test", "copy safe report", "ok"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("doctor view missing %q:\n%s", want, view)
+		}
+	}
+	for _, secret := range []string{"password", "private", "token"} {
+		if strings.Contains(view, secret) {
+			t.Errorf("doctor view leaked %q:\n%s", secret, view)
+		}
+	}
+}
+
+func TestDoctorModalEscapeReturnsToPreviousMode(t *testing.T) {
+	m := send(t, fixture(), "D", "esc")
+	if m.mode != modeFull {
+		t.Errorf("mode after D then esc = %v, want modeFull", m.mode)
+	}
+}
+
+func TestLowercaseDStillOpensDeleteConfirmation(t *testing.T) {
+	m := send(t, fixture(), "d")
+	if m.mode != modeConfirmDelete {
+		t.Errorf("mode after d = %v, want modeConfirmDelete", m.mode)
+	}
+}
+
+func TestDoctorIgnoresResultFromPriorModalSession(t *testing.T) {
+	m := send(t, fixture(), "D")
+	oldSeq := m.doctor.checkSeq
+	m = send(t, m, "esc", "D")
+	if m.doctor.checkSeq == oldSeq {
+		t.Fatalf("doctor sequence was reused: %d", oldSeq)
+	}
+	updated, _ := m.Update(doctorCheckResultMsg{
+		seq:    oldSeq,
+		report: doctor.Report{Player: doctor.Check{Status: doctor.StatusError, Detail: "stale result"}},
+	})
+	m = updated.(Model)
+	if m.doctor.checking {
+		t.Fatal("stale result changed current doctor state")
+	}
+	if m.doctor.checkSeq == oldSeq {
+		t.Fatal("stale result replaced current doctor session")
+	}
+	if m.doctor.report.Player.Detail == "stale result" {
+		t.Fatal("stale result replaced the current doctor report")
 	}
 }
 

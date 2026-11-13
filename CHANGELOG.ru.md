@@ -3,6 +3,16 @@
 Здесь фиксируются все заметные пользовательские изменения. Проект следует
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-11-13
+
+### Добавлено
+
+- **Playback Doctor**: read-only модалка TUI (`D`) и команда
+  `lofi-player doctor` с безопасной диагностикой mpv, зависимостей, конфига,
+  DNS и API Radio Browser.
+- Безопасные действия clipboard: sanitised support report и только hostname
+  активного потока; report никогда не содержит path, query string или токены.
+
 ## [0.2.0] — 2026-11-13
 
 ### Добавлено

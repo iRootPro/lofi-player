@@ -16,6 +16,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/doctor"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/state"
@@ -29,6 +30,18 @@ const mpvStartupTimeout = 5 * time.Second
 var version = "dev"
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "doctor" {
+		if len(os.Args) > 2 {
+			fmt.Fprintln(os.Stderr, "usage: lofi-player doctor")
+			os.Exit(2)
+		}
+		if err := runDoctor(os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	var (
 		statusline    bool
 		showVersion   bool
@@ -99,6 +112,7 @@ func run() error {
 
 	st := state.Load()
 	opts := tui.Options{
+		AppVersion:      version,
 		Theme:           st.Theme,
 		Volume:          st.Volume,
 		AutoplayStation: stationIndex(cfg.Stations, st.LastStationName),
@@ -175,6 +189,17 @@ func run() error {
 		}
 	}
 	return nil
+}
+
+// runDoctor prints a read-only diagnostic report without loading config,
+// starting mpv, or opening the TUI. Its timeout keeps it useful on blocked
+// DNS/VPN networks while allowing each check to observe cancellation.
+func runDoctor(out io.Writer) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	defer cancel()
+	report := doctor.Collect(ctx, doctor.Options{ApplicationVersion: version})
+	_, err := fmt.Fprintln(out, report.String())
+	return err
 }
 
 func runExport(all bool, stationName string) error {

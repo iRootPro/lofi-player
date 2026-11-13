@@ -24,6 +24,7 @@ type KeyMap struct {
 	MixerOpen     key.Binding
 	SettingsOpen  key.Binding
 	StreamInfo    key.Binding
+	Doctor        key.Binding
 	Help          key.Binding
 	Quit          key.Binding
 }
@@ -97,6 +98,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("i"),
 			key.WithHelp("i", "info"),
 		),
+		Doctor: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "doctor"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -113,6 +118,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.AddStation, k.Discovery, k.EditStation, k.DeleteStation, k.ShareStation, k.ImportStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
-		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Help, k.Quit},
+		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Doctor, k.Help, k.Quit},
 	}
 }

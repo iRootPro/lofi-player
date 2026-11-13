@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
+	"github.com/iRootPro/lofi-player/internal/doctor"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 )
@@ -113,6 +114,18 @@ func clearToastAfter() tea.Cmd {
 func copyShareCmd(text string) tea.Cmd {
 	return func() tea.Msg {
 		return shareCopiedMsg{Err: clipboard.WriteAll(text)}
+	}
+}
+
+func doctorCheckCmd(ctx context.Context, seq int, opts doctor.Options) tea.Cmd {
+	return func() tea.Msg {
+		return doctorCheckResultMsg{seq: seq, report: doctor.Collect(ctx, opts)}
+	}
+}
+
+func copyDoctorCmd(kind, text string) tea.Cmd {
+	return func() tea.Msg {
+		return doctorCopiedMsg{kind: kind, err: clipboard.WriteAll(text)}
 	}
 }
 

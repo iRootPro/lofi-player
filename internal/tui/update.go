@@ -107,6 +107,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shareSnippet = ""
 		m.toast = &Toast{Message: "station snippet copied", Kind: ToastSuccess}
 		return m, clearToastAfter()
+	case doctorCheckResultMsg:
+		if tick.seq != m.doctor.checkSeq {
+			return m, nil
+		}
+		m.doctor.checking = false
+		m.doctor.cancel = nil
+		m.doctor.report = tick.report
+		return m, nil
+	case doctorCopiedMsg:
+		if tick.err != nil {
+			m.toast = &Toast{Message: "Clipboard is unavailable.", Kind: ToastError}
+		} else if tick.kind == "host" {
+			m.toast = &Toast{Message: "stream hostname copied", Kind: ToastSuccess}
+		} else {
+			m.toast = &Toast{Message: "safe doctor report copied", Kind: ToastSuccess}
+		}
+		return m, clearToastAfter()
 	case importClipboardMsg:
 		if tick.Err != nil {
 			m.toast = &Toast{Message: "Could not import stations. Check the copied station data.", Kind: ToastError}
@@ -145,6 +162,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if !isAudioEventMsg(msg) && m.mode == modeSettings {
 		return m.updateSettings(msg)
+	}
+	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDoctor {
+		return m.updateDoctor(msg)
 	}
 	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDiscovery {
 		return m.updateDiscovery(msg)
@@ -190,6 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.playStartedAt.IsZero() {
 			m.playStartedAt = time.Now()
 		}
+		m.lastPlaybackIssue = ""
 		return m, waitForEvent(m.player)
 
 	case PlaybackLoadStartedMsg:
@@ -224,6 +245,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bufferingStalled = false
 		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
+		m.lastPlaybackIssue = "Could not play this station."
 		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
 
 	case EOFMsg:
@@ -241,6 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bufferingStalled = false
 		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
+		m.lastPlaybackIssue = "The stream ended."
 		return m, waitForEvent(m.player)
 
 	case StreamInfoChangedMsg:
@@ -291,6 +314,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Message: "Could not " + msg.Action + ". Try again.",
 			Kind:    ToastError,
 		}
+		m.lastPlaybackIssue = "A player command could not be completed."
 		return m, clearToastAfter()
 
 	case clearToastMsg:
@@ -420,6 +444,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.StreamInfo):
 		m.showStreamInfo = !m.showStreamInfo
 		return m, nil
+
+	case key.Matches(msg, m.keys.Doctor):
+		return m.openDoctor(), nil
 
 	case key.Matches(msg, m.keys.Help):
 		m.showFullHelp = !m.showFullHelp

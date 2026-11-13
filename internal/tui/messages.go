@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/doctor"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 )
 
@@ -87,6 +88,19 @@ type clearToastMsg struct{}
 // shareCopiedMsg reports the outcome of copying a station snippet to the
 // system clipboard.
 type shareCopiedMsg struct{ Err error }
+
+// doctorCheckResultMsg carries the outcome of cancellable, read-only checks.
+// seq prevents a late or canceled run from replacing a newer report.
+type doctorCheckResultMsg struct {
+	seq    int
+	report doctor.Report
+}
+
+// doctorCopiedMsg reports a safe report or hostname clipboard operation.
+type doctorCopiedMsg struct {
+	kind string
+	err  error
+}
 
 // importClipboardMsg reports the outcome of reading and parsing a station
 // snippet from the system clipboard.

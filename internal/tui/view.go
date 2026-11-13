@@ -98,6 +98,8 @@ func (m Model) View() string {
 		content = inner.viewSettings()
 	case modeDiscovery:
 		content = inner.viewDiscovery()
+	case modeDoctor:
+		content = inner.viewDoctor()
 	default:
 		content = inner.viewFull()
 	}

@@ -57,6 +57,9 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
   instead of a raw error; missing `yt-dlp` degrades to a startup
   warning and an `unavailable` tag on YouTube stations, so the rest
   of your library keeps playing.
+- **Playback Doctor** — a read-only `D` modal and `lofi-player doctor`
+  command show safe mpv, network, and stream-host diagnostics without
+  starting playback or exposing full stream URLs.
 
 ## Install
 
@@ -80,7 +83,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 
 Auto-detects OS/arch, pulls the matching tarball from the latest
 release, drops the binary into `~/.local/bin`. Override with
-`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.1.4`.
+`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.3.0`.
 
 You'll also need `mpv` (and optionally `yt-dlp`) — see
 [runtime dependencies](#runtime-dependencies) below. The installer
@@ -153,6 +156,7 @@ Quit with `q` or `ctrl+c`.
 | `x` | open ambient mixer (modal) |
 | `o` | open settings (network buffer) |
 | `i` | toggle stream-info row |
+| `D` | open Playback Doctor (uppercase; `d` still deletes) |
 | `?` | toggle full help card |
 | `q` / `ctrl+c` | quit |
 
@@ -211,6 +215,29 @@ station.
 
 Network-buffer changes are persisted for you; no manual config editing needed.
 Restart the app to apply them to the underlying mpv process.
+
+### Playback Doctor (after `D` or `lofi-player doctor`)
+
+The Doctor is read-only: it does not start `mpv`, probe the active stream URL,
+or change configuration/state. The TUI modal shows the current player and
+playback state, a hostname-only stream identifier, discovery checks, and the
+last safe playback issue. `r` runs short cancellable checks for `mpv`,
+`yt-dlp`, config YAML, Radio Browser DNS, and its API.
+
+| key | action |
+|---|---|
+| `r` | run checks (closing with `esc` cancels them) |
+| `c` | copy a sanitised support report |
+| `h` | copy only the active stream hostname, useful for router VPN rules |
+| `esc` | close |
+
+The copied report omits stream paths, query strings, credentials, and tokens.
+Use the CLI command when the TUI cannot start, for example after an mpv startup
+timeout:
+
+```sh
+lofi-player doctor
+```
 
 ### Ambient mixer (after `x`)
 

@@ -3,6 +3,16 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- **Playback Doctor**: read-only TUI modal (`D`) and `lofi-player doctor`
+  command with safe mpv, dependency, config, DNS, and Radio Browser API
+  diagnostics.
+- Safe clipboard actions for a sanitised support report and the active stream
+  hostname only; reports never include stream paths, query strings, or tokens.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added

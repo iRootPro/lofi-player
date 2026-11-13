@@ -9,7 +9,7 @@
 #   INSTALL_DIR   Where to put the binary (default: $HOME/.local/bin).
 #
 # Examples:
-#   VERSION=v0.1.0 sh -c "$(curl -fsSL https://...install.sh)"
+#   VERSION=v0.3.0 sh -c "$(curl -fsSL https://...install.sh)"
 #   INSTALL_DIR=/usr/local/bin sh -c "$(curl -fsSL https://...install.sh)"
 
 set -eu
