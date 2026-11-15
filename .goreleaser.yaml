@@ -12,6 +12,9 @@ builds:
     binary: lofi-player
     env:
       - CGO_ENABLED=0
+      # Build release binaries with the patched toolchain, independent of the
+      # Go version used to run GoReleaser itself.
+      - GOTOOLCHAIN=go1.27.4
     goos:
       - linux
       - darwin

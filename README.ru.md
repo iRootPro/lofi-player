@@ -92,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 [системные зависимости](#системные-зависимости) ниже. Инсталлер
 напишет подсказку если `mpv` не на `$PATH`.
 
-### Из исходников (Go 1.26+)
+### Из исходников (Go 1.26.11+)
 
 ```sh
 go install github.com/iRootPro/lofi-player@latest

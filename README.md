@@ -89,7 +89,7 @@ You'll also need `mpv` (and optionally `yt-dlp`) — see
 [runtime dependencies](#runtime-dependencies) below. The installer
 prints a hint if `mpv` isn't on `$PATH`.
 
-### From source (Go 1.26+)
+### From source (Go 1.26.11+)
 
 ```sh
 go install github.com/iRootPro/lofi-player@latest

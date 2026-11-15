@@ -3,6 +3,18 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-11-15
+
+### Security
+
+- Release binaries now build with Go 1.27.4, which includes the fix for
+  CVE-2026-97054 in the standard library.
+
+### Changed
+
+- CI verifies the minimum supported patched Go release (1.26.11) and Go 1.27.4.
+- Updated GitHub Actions checkout and Go setup actions to v7.
+
 ## [0.3.1] - 2026-11-13
 
 ### Changed
