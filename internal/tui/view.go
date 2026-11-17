@@ -424,7 +424,7 @@ func (m Model) viewDiscovery() string {
 			playing:     m.playing,
 		}
 	}
-	return overlayModal(m.modalBackdrop(), m.discovery.view(m.width, m.styles, m.theme.Muted, playback, m.spinner.View()))
+	return overlayModal(m.modalBackdrop(), m.discovery.view(m.width, m.height, m.styles, m.theme.Muted, playback, m.spinner.View()))
 }
 
 // overlayModal replaces the middle rows of the current screen with a

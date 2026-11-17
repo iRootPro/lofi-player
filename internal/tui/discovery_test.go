@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
@@ -105,6 +106,148 @@ func TestDiscoveryDebouncesAndDropsStaleResults(t *testing.T) {
 	}
 	if !strings.Contains(m.View(), "cached results") {
 		t.Fatal("discovery view does not identify cached results")
+	}
+}
+
+func TestDiscoveryWideViewShowsSelectedSummaryWithoutTagsInRows(t *testing.T) {
+	m := openDiscovery(t, discoveryFixture(&fakeDiscoveryClient{}))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 32})
+	m = next.(Model)
+	name := "Русский Рок — Russian Rock Classics"
+	tags := "amg, rock, russian, classic rock, guitar, alternative"
+	m.discovery.results = []radiobrowser.Station{{
+		Name:        name,
+		CountryCode: "RU",
+		Codec:       "MP3",
+		Bitrate:     128,
+		Tags:        tags,
+		StreamURL:   "https://example.test/russian-rock",
+	}}
+
+	out := m.View()
+	if !strings.Contains(out, name) {
+		t.Fatalf("wide discovery view truncated selected name:\n%s", out)
+	}
+	if !strings.Contains(out, "tags  "+tags) {
+		t.Fatalf("selected summary does not expose tags:\n%s", out)
+	}
+	if strings.Count(out, tags) != 1 {
+		t.Fatalf("tags should appear only in the selected summary, got %d occurrences:\n%s", strings.Count(out, tags), out)
+	}
+	if !strings.Contains(out, "d details") {
+		t.Fatalf("discovery help does not advertise details:\n%s", out)
+	}
+}
+
+func TestDiscoveryDetailsWrapAndScrollWithoutClosingSearch(t *testing.T) {
+	m := openDiscovery(t, discoveryFixture(&fakeDiscoveryClient{}))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
+	m = next.(Model)
+	tags := strings.Repeat("ambient atmospheric electronic instrumental downtempo experimental soundscape cinematic ", 8) + "nocturnal focused"
+	m.discovery.results = []radiobrowser.Station{{
+		Name:        "A deliberately long station name for details",
+		CountryCode: "RU",
+		Codec:       "AAC",
+		Bitrate:     128,
+		Tags:        tags,
+		StreamURL:   "https://example.test/details",
+	}}
+	m.discovery = m.discovery.setFocus(discoveryResultsFocus)
+
+	next, _ = m.Update(discoveryKey('d'))
+	m = next.(Model)
+	if !m.discovery.details || m.mode != modeDiscovery {
+		t.Fatalf("d did not open details inside discovery: details=%v mode=%v", m.discovery.details, m.mode)
+	}
+	if out := m.View(); !strings.Contains(out, "station details") || !strings.Contains(out, "ambient atmospheric") {
+		t.Fatalf("details view does not show wrapped tags:\n%s", out)
+	}
+	if lines := strings.Join(discoveryDetailLines(m.discovery.results[0], 68), " "); !strings.Contains(lines, "nocturnal focused") {
+		t.Fatalf("details data dropped the tail of long tags: %q", lines)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = next.(Model)
+	if m.discovery.detailScroll != 1 {
+		t.Fatalf("details scroll = %d, want 1", m.discovery.detailScroll)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = next.(Model)
+	if m.discovery.detailScroll != 0 {
+		t.Fatalf("details scroll = %d, want 0", m.discovery.detailScroll)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if m.discovery.details || m.mode != modeDiscovery {
+		t.Fatalf("Esc should return to results: details=%v mode=%v", m.discovery.details, m.mode)
+	}
+}
+
+func TestDiscoveryNarrowViewStaysWithinTerminalWidth(t *testing.T) {
+	m := openDiscovery(t, discoveryFixture(&fakeDiscoveryClient{}))
+	m.discovery.results = []radiobrowser.Station{{
+		Name:        "Very long radio station name that must not widen the modal",
+		CountryCode: strings.Repeat("COUNTRY", 20),
+		Codec:       strings.Repeat("CODEC", 20),
+		Bitrate:     128,
+		Tags:        "very long metadata must remain inside the terminal frame",
+		StreamURL:   "https://example.test/narrow",
+	}}
+
+	for _, width := range []int{60, 40} {
+		next, _ := m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
+		m = next.(Model)
+		for _, line := range strings.Split(m.View(), "\n") {
+			if got := lipgloss.Width(line); got > width {
+				t.Fatalf("width %d: rendered line is %d cells wide: %q", width, got, line)
+			}
+		}
+	}
+}
+
+func TestDiscoveryDetailsResizeClampsScroll(t *testing.T) {
+	m := openDiscovery(t, discoveryFixture(&fakeDiscoveryClient{}))
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
+	m = next.(Model)
+	m.discovery.results = []radiobrowser.Station{{
+		Name:      "Station",
+		Tags:      strings.Repeat("ambient atmospheric electronic instrumental ", 20),
+		StreamURL: "https://example.test/resize",
+	}}
+	m.discovery = m.discovery.setFocus(discoveryResultsFocus)
+	next, _ = m.Update(discoveryKey('d'))
+	m = next.(Model)
+	if maxScroll := m.discovery.detailMaxScroll(m.width, m.height); maxScroll == 0 {
+		t.Fatal("fixture must produce a scrollable details view")
+	} else {
+		m.discovery.detailScroll = maxScroll
+	}
+
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = next.(Model)
+	if want := m.discovery.detailMaxScroll(m.width, m.height); m.discovery.detailScroll != want {
+		t.Fatalf("scroll after resize = %d, want %d", m.discovery.detailScroll, want)
+	}
+}
+
+func TestDiscoveryCompactDetailsFitShortTerminal(t *testing.T) {
+	m := openDiscovery(t, discoveryFixture(&fakeDiscoveryClient{}))
+	m.discovery.results = []radiobrowser.Station{{
+		Name:        "A long station name that must wrap in the compact details view",
+		CountryCode: strings.Repeat("COUNTRY", 8),
+		Codec:       strings.Repeat("CODEC", 8),
+		Tags:        strings.Repeat("ambient atmospheric electronic instrumental ", 20),
+	}}
+	m.discovery.details = true
+	out := m.discovery.detailsView(76, 13, m.styles, m.theme.Muted)
+	if got := len(strings.Split(out, "\n")); got > 13 {
+		t.Fatalf("compact details has %d rows, want <= 13:\n%s", got, out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if got := lipgloss.Width(line); got > 76 {
+			t.Fatalf("compact details line is %d cells wide, want <= 76: %q", got, line)
+		}
 	}
 }
 

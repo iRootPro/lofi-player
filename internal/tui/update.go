@@ -90,6 +90,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.discovery.results = tick.results.Stations
 		m.discovery.cursor = 0
+		m.discovery.details = false
+		m.discovery.detailScroll = 0
 		m.discovery.cached = tick.results.Cached
 		m.discovery.err = ""
 		return m, nil
@@ -174,6 +176,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.mode == modeDiscovery && m.discovery.details {
+			m.discovery.detailScroll = min(m.discovery.detailScroll, m.discovery.detailMaxScroll(m.width, m.height))
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -489,9 +494,23 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "esc":
+			if m.discovery.details {
+				m.discovery.details = false
+				m.discovery.detailScroll = 0
+				return m, nil
+			}
 			m.mode = m.modePrev
 			return m, nil
+		case "d":
+			if m.discovery.details {
+				m.discovery.details = false
+				m.discovery.detailScroll = 0
+				return m, nil
+			}
 		case "tab", "shift+tab":
+			if m.discovery.details {
+				return m, nil
+			}
 			next := discoveryResultsFocus
 			if m.discovery.focus == discoveryResultsFocus {
 				next = discoveryInputFocus
@@ -499,6 +518,20 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.discovery = m.discovery.setFocus(next)
 			if m.discovery.focus == discoveryInputFocus {
 				return m, m.discovery.input.Cursor.BlinkCmd()
+			}
+			return m, nil
+		}
+
+		if m.discovery.details {
+			switch km.String() {
+			case "j", "down":
+				if m.discovery.detailScroll < m.discovery.detailMaxScroll(m.width, m.height) {
+					m.discovery.detailScroll++
+				}
+			case "k", "up":
+				if m.discovery.detailScroll > 0 {
+					m.discovery.detailScroll--
+				}
 			}
 			return m, nil
 		}
@@ -521,6 +554,12 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.previewDiscovery()
 			case "s":
 				return m.saveDiscoveryStation()
+			case "d":
+				if _, ok := m.discovery.selected(); ok {
+					m.discovery.details = true
+					m.discovery.detailScroll = 0
+				}
+				return m, nil
 			}
 		}
 		// Keep printable j/k available to type queries such as "jazz".
@@ -544,6 +583,8 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.discovery.searchSeq++
 	m.discovery.results = nil
 	m.discovery.cursor = 0
+	m.discovery.details = false
+	m.discovery.detailScroll = 0
 	m.discovery.loading = false
 	m.discovery.cached = false
 	m.discovery.err = ""

@@ -3,6 +3,14 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.3] - 2026-11-17
+
+### Changed
+
+- Radio Browser discovery now uses the available terminal width more fully.
+- Selected results show a compact metadata summary; press `d` for wrapped,
+  scrollable full station details and tags.
+
 ## [0.3.2] - 2026-11-15
 
 ### Security
