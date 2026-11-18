@@ -12,6 +12,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	listenhistory "github.com/iRootPro/lofi-player/internal/history"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
@@ -51,7 +52,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, logoTick()
 	case clockTickMsg:
 		m.nowTime = tick.At
-		return m, clockTick()
+		var persistCmd tea.Cmd
+		if m.listeningHistory.Active != nil && !m.listeningHistory.Active.ActiveSince.IsZero() &&
+			(m.historySavedAt.IsZero() || tick.At.Sub(m.historySavedAt) >= historyCheckpointInterval) {
+			m.listeningHistory = m.listeningHistory.Checkpoint(tick.At)
+			m.historySavedAt = tick.At
+			m, persistCmd = m.persistListeningHistory()
+		}
+		return m, tea.Batch(clockTick(), persistCmd)
 	case reconnectStreamMsg:
 		station, active := m.activeStation()
 		if tick.seq != m.reconnectSeq || !m.bufferingStalled || !m.playing || !active {
@@ -168,6 +176,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDoctor {
 		return m.updateDoctor(msg)
 	}
+	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeHistory {
+		return m.updateHistory(msg)
+	}
 	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDiscovery {
 		return m.updateDiscovery(msg)
 	}
@@ -216,7 +227,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.playStartedAt = time.Now()
 		}
 		m.lastPlaybackIssue = ""
-		return m, waitForEvent(m.player)
+		m = m.beginListening(m.historyNow())
+		var persistCmd tea.Cmd
+		m, persistCmd = m.persistListeningHistory()
+		return m, tea.Batch(waitForEvent(m.player), persistCmd)
 
 	case PlaybackLoadStartedMsg:
 		if msg.RequestID != m.playRequestID {
@@ -232,7 +246,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.bufferingStalled = false
 		m.reconnectSeq++
-		return m, waitForEvent(m.player)
+		m = m.pauseListening(m.historyNow())
+		var persistCmd tea.Cmd
+		m, persistCmd = m.persistListeningHistory()
+		return m, tea.Batch(waitForEvent(m.player), persistCmd)
 
 	case PlaybackErrorMsg:
 		if msg.RequestID != m.playRequestID {
@@ -251,7 +268,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
 		m.lastPlaybackIssue = "Could not play this station."
-		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player))
+		m = m.endListening(m.historyNow(), listenhistory.EndError)
+		var persistCmd tea.Cmd
+		m, persistCmd = m.persistListeningHistory()
+		return m, tea.Batch(clearToastAfter(), waitForEvent(m.player), persistCmd)
 
 	case EOFMsg:
 		if msg.RequestID != m.playRequestID {
@@ -269,7 +289,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
 		m.lastPlaybackIssue = "The stream ended."
-		return m, waitForEvent(m.player)
+		m = m.endListening(m.historyNow(), listenhistory.EndEOF)
+		var persistCmd tea.Cmd
+		m, persistCmd = m.persistListeningHistory()
+		return m, tea.Batch(waitForEvent(m.player), persistCmd)
 
 	case StreamInfoChangedMsg:
 		if msg.RequestID != m.playRequestID {
@@ -294,20 +317,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.RequestID != m.playRequestID {
 			return m, waitForEvent(m.player)
 		}
+		wasStalled := m.bufferingStalled
 		m.bufferingStalled = msg.Stalled
 		if !msg.Stalled {
 			m.reconnectSeq++
+			if wasStalled && m.playing && !m.loading && m.hasActiveStation() {
+				m = m.beginListening(m.historyNow())
+				var persistCmd tea.Cmd
+				m, persistCmd = m.persistListeningHistory()
+				return m, tea.Batch(waitForEvent(m.player), persistCmd)
+			}
 			return m, waitForEvent(m.player)
+		}
+		if !wasStalled {
+			m = m.pauseListening(m.historyNow())
+			var persistCmd tea.Cmd
+			m, persistCmd = m.persistListeningHistory()
+			if m.playing && !m.loading && m.hasActiveStation() {
+				m.reconnectSeq++
+				seq := m.reconnectSeq
+				m.toast = &Toast{Message: "stream stalled — reconnecting if it does not recover", Kind: ToastInfo}
+				return m, tea.Batch(waitForEvent(m.player), reconnectStreamAfter(seq), clearToastAfter(), persistCmd)
+			}
+			return m, tea.Batch(waitForEvent(m.player), persistCmd)
 		}
 		// paused-for-cache also happens during initial buffering. Only arm
 		// the self-heal watchdog after a station was already playing; slow
 		// startup should keep buffering instead of reload-looping.
-		if m.playing && !m.loading && m.hasActiveStation() {
-			m.reconnectSeq++
-			seq := m.reconnectSeq
-			m.toast = &Toast{Message: "stream stalled — reconnecting if it does not recover", Kind: ToastInfo}
-			return m, tea.Batch(waitForEvent(m.player), reconnectStreamAfter(seq), clearToastAfter())
-		}
 		return m, waitForEvent(m.player)
 
 	case CommandFailedMsg:
@@ -400,6 +436,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.discovery = newDiscoveryModel(m.discoverySession)
 		return m, m.discovery.input.Cursor.BlinkCmd()
 
+	case key.Matches(msg, m.keys.History):
+		return m.openHistory(), nil
+
 	case key.Matches(msg, m.keys.EditStation):
 		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
 			return m, nil
@@ -419,9 +458,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.ShareStation):
-		if m.previewStation != nil {
-			return m.savePlayingDiscoveryStation()
-		}
 		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
 			return m, nil
 		}
@@ -434,6 +470,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeShareStation
 		m.shareSnippet = snippet
 		return m, nil
+
+	case key.Matches(msg, m.keys.SavePreview):
+		return m.savePlayingDiscoveryStation()
 
 	case key.Matches(msg, m.keys.ImportStation):
 		return m, importClipboardCmd()
@@ -501,7 +540,7 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.mode = m.modePrev
 			return m, nil
-		case "d":
+		case "v":
 			if m.discovery.details {
 				m.discovery.details = false
 				m.discovery.detailScroll = 0
@@ -554,7 +593,7 @@ func (m Model) updateDiscovery(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.previewDiscovery()
 			case "s":
 				return m.saveDiscoveryStation()
-			case "d":
+			case "v":
 				if _, ok := m.discovery.selected(); ok {
 					m.discovery.details = true
 					m.discovery.detailScroll = 0
@@ -601,6 +640,11 @@ func (m Model) previewDiscovery() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	// mpv replaces the old source without necessarily emitting a terminal
+	// event for it that belongs to the new request ID, so close its local
+	// listen before changing the active station identity.
+	m = m.endListening(m.historyNow(), listenhistory.EndSwitched)
+	m, persistCmd := m.persistListeningHistory()
 	preview := config.Station{Name: station.Name, URL: station.StreamURL, Kind: config.KindStream}
 	m.previewStation = &preview
 	m.previewUUID = station.UUID
@@ -614,7 +658,7 @@ func (m Model) previewDiscovery() (tea.Model, tea.Cmd) {
 	m.bufferingStalled = false
 	m.reconnectSeq++
 	m.playStartedAt = time.Time{}
-	return m, tea.Batch(playCmd(m.player, preview.URL, requestID), discoveryClickCmd(m.discoveryClient, station.UUID))
+	return m, tea.Batch(playCmd(m.player, preview.URL, requestID), discoveryClickCmd(m.discoveryClient, station.UUID), persistCmd)
 }
 
 // saveDiscoveryStation persists the selected public result only after an
@@ -1007,6 +1051,8 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch {
 	case m.playingIdx == idx:
+		m = m.endListening(m.historyNow(), listenhistory.EndDeleted)
+		m, historyCmd := m.persistListeningHistory()
 		m.playingIdx = -1
 		m.playing = false
 		m.loading = false
@@ -1019,6 +1065,7 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 		if m.player != nil {
 			cmd = pauseCmd(m.player)
 		}
+		cmd = tea.Batch(cmd, historyCmd)
 	case m.playingIdx > idx:
 		m.playingIdx--
 	}
@@ -1112,6 +1159,8 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	// Switching to a different station — replace playback. Mark the
 	// model as loading; the spinner takes over the status slot until
 	// PlaybackStarted arrives from mpv.
+	m = m.endListening(m.historyNow(), listenhistory.EndSwitched)
+	m, historyCmd := m.persistListeningHistory()
 	m.playingIdx = m.cursor
 	m.playing = true
 	m.loading = true
@@ -1122,7 +1171,7 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	m.bufferingStalled = false
 	m.reconnectSeq++
 	m.playStartedAt = time.Time{}
-	return m, playCmd(m.player, m.cfg.Stations[m.cursor].URL, requestID)
+	return m, tea.Batch(playCmd(m.player, m.cfg.Stations[m.cursor].URL, requestID), historyCmd)
 }
 
 // updateMixer routes input while the ambient mixer modal is open.

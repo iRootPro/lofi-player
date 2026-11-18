@@ -46,6 +46,8 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
   line for `status-right`.
 - **State persistence** — last station, volume, theme, ambient levels
   survive restarts (XDG state dir).
+- **Private listening history** — local-only station time, recent sessions,
+  and top stations in the `H` dashboard. History never stores stream URLs.
 - **Manage stations from the TUI** — `a` adds, `e` edits, `d` deletes
   (with confirmation). Station kind is auto-detected from the URL.
 - **ICY metadata** — title/artist updates from the stream are
@@ -83,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 
 Auto-detects OS/arch, pulls the matching tarball from the latest
 release, drops the binary into `~/.local/bin`. Override with
-`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.3.3`.
+`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.4.0`.
 
 You'll also need `mpv` (and optionally `yt-dlp`) — see
 [runtime dependencies](#runtime-dependencies) below. The installer
@@ -151,12 +153,14 @@ Quit with `q` or `ctrl+c`.
 | `/` | search Radio Browser (modal) |
 | `e` | edit selected station (modal) |
 | `d` | delete selected station (with confirmation) |
-| `s` | share selected station as a YAML snippet; save an active unsaved Radio Browser station |
+| `c` | copy/share selected station as a YAML snippet |
+| `s` | save the active unsaved Radio Browser station |
 | `p` | import station snippet from clipboard |
 | `x` | open ambient mixer (modal) |
 | `o` | open settings (network buffer) |
 | `i` | toggle stream-info row |
 | `D` | open Playback Doctor (uppercase; `d` still deletes) |
+| `H` | open listening history (uppercase) |
 | `?` | toggle full help card |
 | `q` / `ctrl+c` | quit |
 
@@ -183,6 +187,7 @@ text plus these filters, which may be combined:
 | `tab` / `shift+tab` | alternate switch between search field and results |
 | `enter` | play selected station without saving it |
 | `s` | save selected station to `config.yaml` (duplicates by URL are skipped) |
+| `v` | show selected station details |
 | `esc` | close search; an unsaved station keeps playing |
 
 Search uses [Radio Browser](https://www.radio-browser.info/)'s public mirror
@@ -200,7 +205,7 @@ include raw Go, mpv, or HTTP errors.
 If an unsaved catalog station is still playing after you close discovery, the
 now-playing view keeps it actionable: `Radio Browser · not saved · s save`.
 Here `s` saves the active catalog stream even if the library cursor is on a
-different station. After saving, it returns to sharing the selected library
+different station. After saving, press `c` to share the selected library
 station.
 
 ### Settings (after `o`)
@@ -238,6 +243,26 @@ timeout:
 ```sh
 lofi-player doctor
 ```
+
+### Listening history (after `H`)
+
+The local dashboard shows today, the last seven days, or all retained time;
+top stations; and recent completed sessions. It counts confirmed audible
+playback only, so pauses are excluded and accidental previews shorter than 30
+seconds are ignored. Data stays in
+`$XDG_STATE_HOME/lofi-player/history.json` (or `~/.local/state/...`) with
+private file permissions; station names are kept, but stream URLs and ICY
+metadata are never written there.
+
+History retains up to 90 days or 5,000 sessions. A checkpoint during long
+listens limits data loss after an unexpected exit without counting time while
+the app was closed.
+
+| key | action |
+|---|---|
+| `←` / `→` · `h` / `l` | switch period |
+| `C` | clear completed history (requires confirmation) |
+| `esc` / `H` | close |
 
 ### Ambient mixer (after `x`)
 
@@ -277,7 +302,7 @@ now-playing card. The change is written to `config.yaml` immediately.
 `lofi-player` shares stations as small YAML snippets you can paste into
 Telegram, Slack, Discord, a README, or a gist — no accounts or backend.
 
-Press `s` on a station to open a share card, then `enter` to copy:
+Press `c` on a saved station to open a share card, then `enter` to copy:
 
 ```yaml
 stations:

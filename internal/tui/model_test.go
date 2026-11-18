@@ -1,16 +1,19 @@
 package tui
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/doctor"
+	listenhistory "github.com/iRootPro/lofi-player/internal/history"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -45,6 +48,10 @@ func send(t *testing.T, m Model, keys ...string) Model {
 			msg = tea.KeyMsg{Type: tea.KeyUp}
 		case "down":
 			msg = tea.KeyMsg{Type: tea.KeyDown}
+		case "left":
+			msg = tea.KeyMsg{Type: tea.KeyLeft}
+		case "right":
+			msg = tea.KeyMsg{Type: tea.KeyRight}
 		case "esc":
 			msg = tea.KeyMsg{Type: tea.KeyEsc}
 		case "enter":
@@ -154,6 +161,172 @@ func TestDoctorModalEscapeReturnsToPreviousMode(t *testing.T) {
 	m := send(t, fixture(), "D", "esc")
 	if m.mode != modeFull {
 		t.Errorf("mode after D then esc = %v, want modeFull", m.mode)
+	}
+}
+
+func TestHistoryModalOpensCyclesPeriodsAndReturns(t *testing.T) {
+	m := fixture()
+	now := time.Date(2026, time.November, 17, 18, 0, 0, 0, time.Local)
+	m.nowTime = now
+	m.listeningHistory = listenhistory.History{
+		Version: 1,
+		Sessions: []listenhistory.Session{{
+			StationName:   "A",
+			Source:        listenhistory.SourceLibrary,
+			StartedAt:     now.Add(-45 * time.Minute),
+			EndedAt:       now.Add(-15 * time.Minute),
+			PlayedSeconds: 30 * 60,
+			Segments: []listenhistory.Segment{{
+				StartedAt: now.Add(-45 * time.Minute),
+				EndedAt:   now.Add(-15 * time.Minute),
+			}},
+		}},
+	}
+
+	m = send(t, m, "H")
+	if m.mode != modeHistory {
+		t.Fatalf("mode after H = %v, want history", m.mode)
+	}
+	for _, want := range []string{"listening history", "today", "top stations", "recent", "30m"} {
+		if out := m.View(); !strings.Contains(out, want) {
+			t.Errorf("history view missing %q:\n%s", want, out)
+		}
+	}
+	m = send(t, m, "right")
+	if m.historyUI.period != historyWeek {
+		t.Errorf("period after right = %d, want week", m.historyUI.period)
+	}
+	m = send(t, m, "esc")
+	if m.mode != modeFull {
+		t.Errorf("mode after history esc = %v, want full", m.mode)
+	}
+}
+
+func TestHistoryModalClearRequiresConfirmation(t *testing.T) {
+	m := fixture()
+	now := time.Date(2026, time.November, 17, 18, 0, 0, 0, time.Local)
+	m.nowTime = now
+	m.listeningHistory = listenhistory.History{
+		Version: 1,
+		Sessions: []listenhistory.Session{{
+			StationName:   "A",
+			PlayedSeconds: 60,
+			EndedAt:       now,
+			Segments:      []listenhistory.Segment{{StartedAt: now.Add(-time.Minute), EndedAt: now}},
+		}},
+	}
+	m = send(t, m, "H", "C")
+	if !m.historyUI.confirmingClear || len(m.listeningHistory.Sessions) != 1 {
+		t.Fatalf("x cleared without confirmation: %+v", m.historyUI)
+	}
+	m = send(t, m, "esc")
+	if m.historyUI.confirmingClear || len(m.listeningHistory.Sessions) != 1 {
+		t.Fatal("escape did not cancel history clearing")
+	}
+	m = send(t, m, "C", "y")
+	if len(m.listeningHistory.Sessions) != 0 {
+		t.Fatalf("confirmed clear retained sessions: %+v", m.listeningHistory.Sessions)
+	}
+}
+
+func TestHistoryXDoesNotStartClearConfirmation(t *testing.T) {
+	m := send(t, fixture(), "H", "x")
+	if m.historyUI.confirmingClear {
+		t.Fatal("x must remain reserved for the ambient mixer, not clear history")
+	}
+}
+
+func TestListeningHistoryTracksConfirmedPlaybackAndPauses(t *testing.T) {
+	m := fixture()
+	start := time.Date(2026, time.November, 17, 10, 0, 0, 0, time.UTC)
+	m.playingIdx = 0
+	m.playRequestID = 7
+	m.nowTime = start
+
+	next, _ := m.Update(PlaybackStartedMsg{RequestID: 7})
+	m = next.(Model)
+	if m.listeningHistory.Active == nil || m.listeningHistory.Active.StationName != "A" {
+		t.Fatalf("start did not open history session: %+v", m.listeningHistory)
+	}
+	m.nowTime = start.Add(20 * time.Minute)
+	next, _ = m.Update(PlaybackPausedMsg{RequestID: 7})
+	m = next.(Model)
+	m.nowTime = start.Add(50 * time.Minute)
+	next, _ = m.Update(PlaybackStartedMsg{RequestID: 7})
+	m = next.(Model)
+	m.nowTime = start.Add(65 * time.Minute)
+	next, _ = m.Update(EOFMsg{RequestID: 7})
+	m = next.(Model)
+
+	if m.listeningHistory.Active != nil || len(m.listeningHistory.Sessions) != 1 {
+		t.Fatalf("terminal event did not finalize history: %+v", m.listeningHistory)
+	}
+	if got, want := m.listeningHistory.Sessions[0].PlayedSeconds, int64(35*60); got != want {
+		t.Errorf("recorded seconds = %d, want %d (pause excluded)", got, want)
+	}
+}
+
+func TestListeningHistoryExcludesBufferingTime(t *testing.T) {
+	m := fixture()
+	start := time.Date(2026, time.November, 17, 10, 0, 0, 0, time.UTC)
+	m.playingIdx = 0
+	m.playRequestID = 9
+	m.nowTime = start
+	next, _ := m.Update(PlaybackStartedMsg{RequestID: 9})
+	m = next.(Model)
+	m.nowTime = start.Add(5 * time.Minute)
+	next, _ = m.Update(BufferingChangedMsg{Stalled: true, RequestID: 9})
+	m = next.(Model)
+	m.nowTime = start.Add(10 * time.Minute)
+	next, _ = m.Update(BufferingChangedMsg{Stalled: false, RequestID: 9})
+	m = next.(Model)
+	m.nowTime = start.Add(15 * time.Minute)
+	next, _ = m.Update(EOFMsg{RequestID: 9})
+	m = next.(Model)
+
+	if got, want := m.listeningHistory.Sessions[0].PlayedSeconds, int64(10*60); got != want {
+		t.Errorf("recorded seconds = %d, want %d (buffering excluded)", got, want)
+	}
+}
+
+func TestListeningHistoryNeverStoresICYMetadata(t *testing.T) {
+	m := fixture()
+	m.playingIdx = 0
+	m.playRequestID = 11
+	m.nowTime = time.Date(2026, time.November, 17, 10, 0, 0, 0, time.UTC)
+	next, _ := m.Update(PlaybackStartedMsg{RequestID: 11})
+	m = next.(Model)
+	next, _ = m.Update(MetadataChangedMsg{RequestID: 11, Title: "Authorization: Bearer secret-token"})
+	m = next.(Model)
+	m.nowTime = m.nowTime.Add(time.Minute)
+	next, _ = m.Update(EOFMsg{RequestID: 11})
+	m = next.(Model)
+	data, err := json.Marshal(m.listeningHistory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "secret-token") {
+		t.Fatalf("history persisted ICY metadata: %s", data)
+	}
+}
+
+func TestHistoryModalNarrowViewDoesNotOverflow(t *testing.T) {
+	m := fixture()
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	m = next.(Model)
+	now := time.Now()
+	m.nowTime = now
+	m.listeningHistory = listenhistory.History{Version: 1, Sessions: []listenhistory.Session{{
+		StationName:   "Very long station name that must remain inside the history modal",
+		PlayedSeconds: 90 * 60,
+		EndedAt:       now,
+		Segments:      []listenhistory.Segment{{StartedAt: now.Add(-90 * time.Minute), EndedAt: now}},
+	}}}
+	m = send(t, m, "H")
+	for _, line := range strings.Split(m.View(), "\n") {
+		if got := lipgloss.Width(line); got > 40 {
+			t.Fatalf("history line is %d cells, want <= 40: %q", got, line)
+		}
 	}
 }
 
@@ -499,14 +672,59 @@ func TestKeyMapHasMixerOpenX(t *testing.T) {
 	t.Error("MixerOpen does not include 'x'")
 }
 
-func TestPressSOpensShareModal(t *testing.T) {
+func TestCommandKeyBindingsAreUnique(t *testing.T) {
+	km := DefaultKeyMap()
+	bindings := []struct {
+		name string
+		keys []string
+	}{
+		{"add", km.AddStation.Keys()},
+		{"discover", km.Discovery.Keys()},
+		{"edit", km.EditStation.Keys()},
+		{"delete", km.DeleteStation.Keys()},
+		{"share", km.ShareStation.Keys()},
+		{"save", km.SavePreview.Keys()},
+		{"paste", km.ImportStation.Keys()},
+		{"mixer", km.MixerOpen.Keys()},
+		{"settings", km.SettingsOpen.Keys()},
+		{"stream info", km.StreamInfo.Keys()},
+		{"doctor", km.Doctor.Keys()},
+		{"history", km.History.Keys()},
+		{"help", km.Help.Keys()},
+	}
+	seen := make(map[string]string)
+	for _, binding := range bindings {
+		for _, shortcut := range binding.keys {
+			if previous, exists := seen[shortcut]; exists {
+				t.Fatalf("shortcut %q is assigned to both %s and %s", shortcut, previous, binding.name)
+			}
+			seen[shortcut] = binding.name
+		}
+	}
+}
+
+func TestFullHelpExplainsSaveOnlyAppliesToPreview(t *testing.T) {
 	m := fixture()
-	m = send(t, m, "s")
+	if out := m.renderFullHelp(); !strings.Contains(out, "save preview") {
+		t.Fatalf("full help must qualify the contextual save shortcut:\n%s", out)
+	}
+}
+
+func TestPressCOpensShareModal(t *testing.T) {
+	m := fixture()
+	m = send(t, m, "c")
 	if m.mode != modeShareStation {
-		t.Fatalf("mode after s: got %v, want modeShareStation", m.mode)
+		t.Fatalf("mode after c: got %v, want modeShareStation", m.mode)
 	}
 	if !strings.Contains(m.shareSnippet, "stations:") || !strings.Contains(m.shareSnippet, "name: A") {
 		t.Fatalf("share snippet missing station data:\n%s", m.shareSnippet)
+	}
+}
+
+func TestPressSDoesNotOpenShareModalForSavedStation(t *testing.T) {
+	m := send(t, fixture(), "s")
+	if m.mode != modeFull {
+		t.Fatalf("mode after s on saved station: got %v, want full", m.mode)
 	}
 }
 
@@ -553,9 +771,9 @@ func TestPressSSavesActiveUnsavedDiscoveryStation(t *testing.T) {
 
 func TestShareEscClosesModal(t *testing.T) {
 	m := fixture()
-	m = send(t, m, "s", "esc")
+	m = send(t, m, "c", "esc")
 	if m.mode != modeFull {
-		t.Fatalf("mode after s+esc: got %v, want modeFull", m.mode)
+		t.Fatalf("mode after c+esc: got %v, want modeFull", m.mode)
 	}
 	if m.shareSnippet != "" {
 		t.Fatalf("shareSnippet not cleared: %q", m.shareSnippet)

@@ -134,7 +134,7 @@ func TestDiscoveryWideViewShowsSelectedSummaryWithoutTagsInRows(t *testing.T) {
 	if strings.Count(out, tags) != 1 {
 		t.Fatalf("tags should appear only in the selected summary, got %d occurrences:\n%s", strings.Count(out, tags), out)
 	}
-	if !strings.Contains(out, "d details") {
+	if !strings.Contains(out, "v details") {
 		t.Fatalf("discovery help does not advertise details:\n%s", out)
 	}
 }
@@ -156,8 +156,13 @@ func TestDiscoveryDetailsWrapAndScrollWithoutClosingSearch(t *testing.T) {
 
 	next, _ = m.Update(discoveryKey('d'))
 	m = next.(Model)
+	if m.discovery.details {
+		t.Fatal("d must remain reserved for deleting a saved station, not discovery details")
+	}
+	next, _ = m.Update(discoveryKey('v'))
+	m = next.(Model)
 	if !m.discovery.details || m.mode != modeDiscovery {
-		t.Fatalf("d did not open details inside discovery: details=%v mode=%v", m.discovery.details, m.mode)
+		t.Fatalf("v did not open details inside discovery: details=%v mode=%v", m.discovery.details, m.mode)
 	}
 	if out := m.View(); !strings.Contains(out, "station details") || !strings.Contains(out, "ambient atmospheric") {
 		t.Fatalf("details view does not show wrapped tags:\n%s", out)
@@ -216,7 +221,7 @@ func TestDiscoveryDetailsResizeClampsScroll(t *testing.T) {
 		StreamURL: "https://example.test/resize",
 	}}
 	m.discovery = m.discovery.setFocus(discoveryResultsFocus)
-	next, _ = m.Update(discoveryKey('d'))
+	next, _ = m.Update(discoveryKey('v'))
 	m = next.(Model)
 	if maxScroll := m.discovery.detailMaxScroll(m.width, m.height); maxScroll == 0 {
 		t.Fatal("fixture must produce a scrollable details view")

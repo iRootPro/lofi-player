@@ -17,6 +17,7 @@ import (
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/doctor"
+	listenhistory "github.com/iRootPro/lofi-player/internal/history"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/state"
@@ -111,15 +112,29 @@ func run() error {
 	youtubeWarning := preflightYouTube(cfg.Stations)
 
 	st := state.Load()
+	listeningHistory := listenhistory.Load()
+	if recovered, changed := listeningHistory.Recover(); changed {
+		listeningHistory = recovered
+		// A prior process may have ended unexpectedly. Persist its bounded
+		// checkpoint now, but do not prevent playback if the state directory
+		// is temporarily unavailable.
+		if err := listenhistory.Save(listeningHistory); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: history recovery save failed: %v\n", err)
+		}
+	}
 	opts := tui.Options{
-		AppVersion:      version,
-		Theme:           st.Theme,
-		Volume:          st.Volume,
-		AutoplayStation: stationIndex(cfg.Stations, st.LastStationName),
-		ShowStreamInfo:  st.ShowStreamInfo,
-		StartupWarning:  youtubeWarning,
-		YouTubeReady:    youtubeWarning == "",
-		Discovery:       radiobrowser.New(radiobrowser.Options{}),
+		AppVersion:       version,
+		Theme:            st.Theme,
+		Volume:           st.Volume,
+		AutoplayStation:  stationIndex(cfg.Stations, st.LastStationName),
+		ShowStreamInfo:   st.ShowStreamInfo,
+		StartupWarning:   youtubeWarning,
+		YouTubeReady:     youtubeWarning == "",
+		Discovery:        radiobrowser.New(radiobrowser.Options{}),
+		ListeningHistory: listeningHistory,
+		SaveListeningHistory: func(h listenhistory.History) error {
+			return listenhistory.Save(h)
+		},
 	}
 	effectiveVolume := cfg.Volume
 	if opts.Volume > 0 {
@@ -168,6 +183,9 @@ func run() error {
 	}
 
 	if m, ok := finalModel.(tui.Model); ok {
+		if err := listenhistory.Save(m.FinalListeningHistory(time.Now())); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: history save failed: %v\n", err)
+		}
 		// Persistence is best-effort — write failure logs to stderr (now
 		// that the alt-screen is restored) and never aborts shutdown.
 		showInfo := m.ShowStreamInfo()

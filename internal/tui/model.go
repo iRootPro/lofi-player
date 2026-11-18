@@ -9,6 +9,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	listenhistory "github.com/iRootPro/lofi-player/internal/history"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
@@ -62,6 +63,12 @@ type Options struct {
 	// operations. It is optional so the rest of the player keeps working
 	// in embedders that deliberately omit public discovery.
 	Discovery radiobrowser.Client
+	// ListeningHistory is the private local history document loaded by main.
+	// It contains station snapshots and never stream URLs.
+	ListeningHistory listenhistory.History
+	// SaveListeningHistory persists the history on lifecycle boundaries and
+	// checkpoints. The TUI keeps playback working when this callback fails.
+	SaveListeningHistory func(listenhistory.History) error
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -79,6 +86,7 @@ const (
 	modeSettings
 	modeDiscovery
 	modeDoctor
+	modeHistory
 )
 
 // Model is the root Bubble Tea model.
@@ -151,6 +159,13 @@ type Model struct {
 	// search cannot populate a new search session with the same sequence ID.
 	discoverySession int
 	doctor           doctorModel
+	historyUI        historyModel
+	listeningHistory listenhistory.History
+	saveHistory      func(listenhistory.History) error
+	// historySavedAt bounds active-session checkpoint writes. A checkpoint is
+	// enough to preserve most of a long listen after an unexpected exit without
+	// putting disk I/O on the per-second rendering path.
+	historySavedAt time.Time
 	// doctorCheckSeq is monotonic across modal sessions, so a canceled check
 	// from a prior open can never update a freshly opened Doctor.
 	doctorCheckSeq int
@@ -309,6 +324,8 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		pendingDeleteIdx: -1,
 		youtubeReady:     opts.YouTubeReady,
 		discoveryClient:  opts.Discovery,
+		listeningHistory: opts.ListeningHistory,
+		saveHistory:      opts.SaveListeningHistory,
 		startupWarning:   opts.StartupWarning,
 		toast:            startupToast,
 	}
@@ -380,6 +397,12 @@ func (m *Model) nextPlayRequestID() uint64 {
 // visible — used by main on shutdown to persist the toggle across
 // sessions.
 func (m Model) ShowStreamInfo() bool { return m.showStreamInfo }
+
+// FinalListeningHistory closes any active local listen for clean shutdown.
+// main persists the returned document after Bubble Tea restores the terminal.
+func (m Model) FinalListeningHistory(at time.Time) listenhistory.History {
+	return m.listeningHistory.End(at, listenhistory.EndQuit)
+}
 
 func clampVolume(v int) int {
 	switch {

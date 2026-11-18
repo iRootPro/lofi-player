@@ -100,6 +100,8 @@ func (m Model) View() string {
 		content = inner.viewDiscovery()
 	case modeDoctor:
 		content = inner.viewDoctor()
+	case modeHistory:
+		content = inner.viewHistory()
 	default:
 		content = inner.viewFull()
 	}
@@ -969,8 +971,10 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
 
 	keyStyle := m.styles.AppTitle
+	libraryKeys := "c/p"
 	libraryAction := "share/import"
 	if m.previewStation != nil {
+		libraryKeys = "s/p"
 		libraryAction = "save/paste"
 	}
 	parts := []string{
@@ -978,7 +982,7 @@ func (m Model) renderBottomHelp(frameWidth int) string {
 		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render("station"),
 		keyStyle.Render("/") + " " + m.styles.HelpDesc.Render("discover"),
 		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
-		keyStyle.Render("s/p") + " " + m.styles.HelpDesc.Render(libraryAction),
+		keyStyle.Render(libraryKeys) + " " + m.styles.HelpDesc.Render(libraryAction),
 		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
 		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render("themes"),
 		keyStyle.Render("o") + " " + m.styles.HelpDesc.Render("settings"),

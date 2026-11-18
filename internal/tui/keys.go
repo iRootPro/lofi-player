@@ -20,11 +20,13 @@ type KeyMap struct {
 	EditStation   key.Binding
 	DeleteStation key.Binding
 	ShareStation  key.Binding
+	SavePreview   key.Binding
 	ImportStation key.Binding
 	MixerOpen     key.Binding
 	SettingsOpen  key.Binding
 	StreamInfo    key.Binding
 	Doctor        key.Binding
+	History       key.Binding
 	Help          key.Binding
 	Quit          key.Binding
 }
@@ -79,8 +81,12 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("d", "delete"),
 		),
 		ShareStation: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "share"),
+		),
+		SavePreview: key.NewBinding(
 			key.WithKeys("s"),
-			key.WithHelp("s", "share"),
+			key.WithHelp("s", "save preview"),
 		),
 		ImportStation: key.NewBinding(
 			key.WithKeys("p"),
@@ -102,6 +108,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("D"),
 			key.WithHelp("D", "doctor"),
 		),
+		History: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "history"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -116,8 +126,8 @@ func DefaultKeyMap() KeyMap {
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.AddStation, k.Discovery, k.EditStation, k.DeleteStation, k.ShareStation, k.ImportStation, k.MixerOpen},
+		{k.Up, k.Down, k.AddStation, k.Discovery, k.EditStation, k.DeleteStation, k.ShareStation, k.SavePreview, k.ImportStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
-		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Doctor, k.Help, k.Quit},
+		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Doctor, k.History, k.Help, k.Quit},
 	}
 }

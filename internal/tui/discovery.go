@@ -200,7 +200,7 @@ func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Co
 		styles.HelpSep.Render("·") + "  " +
 		styles.HelpKey.Render("s") + " " + styles.HelpDesc.Render("save") + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("d") + " " + styles.HelpDesc.Render("details") + "  " +
+		styles.HelpKey.Render("v") + " " + styles.HelpDesc.Render("details") + "  " +
 		styles.HelpSep.Render("·") + "  " +
 		styles.HelpKey.Render("esc") + " " + styles.HelpDesc.Render("close"))
 
@@ -278,7 +278,7 @@ func renderDiscoverySummary(station radiobrowser.Station, width int, styles Styl
 		body.WriteString(styles.Hint.Render("tags  " + truncateRunes(station.Tags, max(4, width-6))))
 	}
 	body.WriteString("\n")
-	body.WriteString(styles.Hint.Render("press d for full details"))
+	body.WriteString(styles.Hint.Render("press v for full details"))
 	return body.String()
 }
 
@@ -324,7 +324,7 @@ func (d discoveryModel) detailsView(width, height int, styles Styles, muted lipg
 		body.WriteString("\n\n")
 		body.WriteString(styles.HelpKey.Render("jk/↑↓") + " " + styles.HelpDesc.Render("scroll") + "  " +
 			styles.HelpSep.Render("·") + "  " +
-			styles.HelpKey.Render("d / esc") + " " + styles.HelpDesc.Render("back"))
+			styles.HelpKey.Render("v / esc") + " " + styles.HelpDesc.Render("back"))
 	}
 
 	cardStyle := lipgloss.NewStyle().

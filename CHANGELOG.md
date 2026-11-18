@@ -3,6 +3,22 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-18
+
+### Added
+
+- **Private local listening history**: the `H` dashboard shows today, the last
+  seven days, or all retained listening time, top stations, and recent sessions.
+  It keeps no stream URLs or ICY metadata, excludes pauses and buffering, and
+  recovers bounded checkpoints after an unexpected exit.
+
+### Changed
+
+- Semantic hotkeys are now unambiguous: `c` shares a saved library station,
+  `s` saves an active unsaved Radio Browser preview, `v` opens discovery
+  details, and `C` clears listening history. Contextual navigation keys remain
+  unchanged.
+
 ## [0.3.3] - 2026-11-17
 
 ### Changed
