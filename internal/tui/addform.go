@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 )
 
 // addStationForm holds the modal form used both for adding a new
@@ -72,7 +73,7 @@ func newStationForm(initName, initURL string, editIdx int) addStationForm {
 // handling the form-level keys (Tab, Enter, Esc). The returned ok bool
 // is true when the form is still open; result is meaningful only when
 // ok is false.
-func (f addStationForm) update(msg tea.Msg) (addStationForm, addFormResult, bool, tea.Cmd) {
+func (f addStationForm) update(locale i18n.Locale, msg tea.Msg) (addStationForm, addFormResult, bool, tea.Cmd) {
 	if km, isKey := msg.(tea.KeyMsg); isKey {
 		switch km.String() {
 		case "esc":
@@ -87,11 +88,11 @@ func (f addStationForm) update(msg tea.Msg) (addStationForm, addFormResult, bool
 			name := strings.TrimSpace(f.name.Value())
 			url := strings.TrimSpace(f.url.Value())
 			if name == "" {
-				f.err = "name is required"
+				f.err = i18n.T(locale, "name_required")
 				return f, addFormResult{}, true, nil
 			}
 			if url == "" {
-				f.err = "url is required"
+				f.err = i18n.T(locale, "url_required")
 				return f, addFormResult{}, true, nil
 			}
 			station := config.Station{
@@ -134,37 +135,37 @@ func (f addStationForm) advanceFocus(delta int) addStationForm {
 // the terminal width used to center the card; styles supplies the
 // active theme's lipgloss palette so the card matches the rest of the
 // UI on theme change.
-func (f addStationForm) view(width int, styles Styles, themeMuted lipgloss.Color) string {
+func (f addStationForm) view(locale i18n.Locale, width int, styles Styles, themeMuted lipgloss.Color) string {
 	label := func(s string) string {
 		return styles.HelpDesc.Render(s)
 	}
 
-	title := "─── add station ───"
+	title := i18n.T(locale, "add_station")
 	if f.editIdx >= 0 {
-		title = "─── edit station ───"
+		title = i18n.T(locale, "edit_station")
 	}
 	var inner strings.Builder
 	inner.WriteString(styles.SectionHeader.Render(title))
 	inner.WriteString("\n\n")
-	inner.WriteString(label("name  ") + f.name.View())
+	inner.WriteString(label(i18n.T(locale, "name")) + f.name.View())
 	inner.WriteString("\n")
-	inner.WriteString(label("url   ") + f.url.View())
+	inner.WriteString(label(i18n.T(locale, "url")) + f.url.View())
 	inner.WriteString("\n\n")
 
 	if f.err != "" {
-		inner.WriteString(styles.StationCursor.Render("error: "))
+		inner.WriteString(styles.StationCursor.Render(i18n.T(locale, "error")))
 		inner.WriteString(styles.HelpDesc.Render(f.err))
 		inner.WriteString("\n\n")
 	}
 
 	hint := styles.HelpKey.Render("enter") + " " +
-		styles.HelpDesc.Render("save") + "  " +
+		styles.HelpDesc.Render(i18n.T(locale, "save")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
 		styles.HelpKey.Render("tab") + " " +
-		styles.HelpDesc.Render("next field") + "  " +
+		styles.HelpDesc.Render(i18n.T(locale, "next_field")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
 		styles.HelpKey.Render("esc") + " " +
-		styles.HelpDesc.Render("cancel")
+		styles.HelpDesc.Render(i18n.T(locale, "cancel"))
 	inner.WriteString(hint)
 
 	card := lipgloss.NewStyle().

@@ -48,6 +48,8 @@ direct HTTP streams, and YouTube live/videos via `yt-dlp`).
   survive restarts (XDG state dir).
 - **Private listening history** — local-only station time, recent sessions,
   and top stations in the `H` dashboard. History never stores stream URLs.
+- **Update notice** — an unobtrusive `u` notice appears when a newer stable
+  release is available; it never downloads or installs anything automatically.
 - **Manage stations from the TUI** — `a` adds, `e` edits, `d` deletes
   (with confirmation). Station kind is auto-detected from the URL.
 - **ICY metadata** — title/artist updates from the stream are
@@ -85,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/iRootPro/lofi-player/main/scripts/i
 
 Auto-detects OS/arch, pulls the matching tarball from the latest
 release, drops the binary into `~/.local/bin`. Override with
-`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.4.0`.
+`INSTALL_DIR=/usr/local/bin` or pin to a tag with `VERSION=v0.5.0`.
 
 You'll also need `mpv` (and optionally `yt-dlp`) — see
 [runtime dependencies](#runtime-dependencies) below. The installer
@@ -161,11 +163,24 @@ Quit with `q` or `ctrl+c`.
 | `i` | toggle stream-info row |
 | `D` | open Playback Doctor (uppercase; `d` still deletes) |
 | `H` | open listening history (uppercase) |
+| `u` | show update details when a newer release is available |
 | `?` | toggle full help card |
 | `q` / `ctrl+c` | quit |
 
 The macOS hardware Play/Pause key controls the station already loaded
 in mpv; if no station has been started yet, it is ignored.
+
+### Update checks
+
+After the TUI becomes visible, released builds check the public GitHub Releases
+endpoint in the background at most once per 24 hours. The check has a short
+timeout, is silent when offline or rate-limited, and does not delay playback.
+It stores only the ETag, check time, and public release metadata in
+`$XDG_CACHE_HOME/lofi-player/update.json` (or `~/.cache/...`); no account,
+station, listening-history, or stream URL data is sent.
+
+Use `lofi-player --check-update` to force a one-off check. Update installation
+remains manual: Homebrew users can run `brew upgrade iRootPro/tap/lofi-player`.
 
 ### Radio Browser discovery (after `/`)
 
@@ -215,11 +230,17 @@ station.
 | `j` / `↓` · `k` / `↑` | select setting |
 | `h` / `←` · `l` / `→` | adjust by 5 seconds (`initial buffer` is capped at 10s) |
 | `0` | turn selected setting off |
+| `language` row | `System`, `English`, or `Русский` — applies after saving |
 | `enter` | save |
 | `esc` | cancel |
 
 Network-buffer changes are persisted for you; no manual config editing needed.
 Restart the app to apply them to the underlying mpv process.
+
+The default language follows your system locale (`ru*` selects Russian; all
+other locales select English). Language affects all first-party TUI and CLI
+text, including `doctor` and `--check-update`; station names and stream
+metadata are never translated.
 
 ### Playback Doctor (after `D` or `lofi-player doctor`)
 
@@ -334,6 +355,7 @@ on first run with sensible defaults; a documented example sits at
 [`configs/lofi-player.example.yaml`](configs/lofi-player.example.yaml).
 
 ```yaml
+language: auto             # auto (system locale), en, or ru
 theme: tokyo-night        # see Themes below for all built-in theme ids
 volume: 60                # initial volume, 0–100
 buffer_seconds: 30        # network read-ahead; try 60–120 on flaky Wi-Fi

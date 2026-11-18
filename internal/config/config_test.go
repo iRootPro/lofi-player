@@ -170,8 +170,32 @@ func TestLoadFromFile_MissingFieldsKeepDefaults(t *testing.T) {
 	if cfg.InitialBufferSeconds != defaults.InitialBufferSeconds {
 		t.Errorf("InitialBufferSeconds = %d, want default %d", cfg.InitialBufferSeconds, defaults.InitialBufferSeconds)
 	}
+	if cfg.Language != "auto" {
+		t.Errorf("Language = %q, want auto for legacy config", cfg.Language)
+	}
 	if len(cfg.Stations) != 1 || cfg.Stations[0].Name != "Only" {
 		t.Errorf("Stations = %+v, want [{Only http://x}]", cfg.Stations)
+	}
+}
+
+func TestLanguageChoiceIsReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if got := LanguageChoice(); got != "auto" {
+		t.Fatalf("LanguageChoice missing config = %q, want auto", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "lofi-player", "config.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("LanguageChoice created config: %v", err)
+	}
+	path := filepath.Join(dir, "lofi-player", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("language: ru\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LanguageChoice(); got != "ru" {
+		t.Errorf("LanguageChoice = %q, want ru", got)
 	}
 }
 

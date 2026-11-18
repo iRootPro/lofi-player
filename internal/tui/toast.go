@@ -2,6 +2,8 @@ package tui
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/iRootPro/lofi-player/internal/i18n"
 )
 
 // ToastKind classifies a Toast for visual styling.
@@ -37,12 +39,12 @@ func (t Toast) labelStyle(s Styles) lipgloss.Style {
 }
 
 // label is the human-readable prefix that precedes the message.
-func (t Toast) label() string {
+func (t Toast) label(locale i18n.Locale) string {
 	switch t.Kind {
 	case ToastError:
-		return "error: "
+		return i18n.T(locale, "error_label")
 	case ToastSuccess:
-		return "ok: "
+		return i18n.T(locale, "success_label")
 	default:
 		return ""
 	}

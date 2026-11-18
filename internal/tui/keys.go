@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+
+	"github.com/iRootPro/lofi-player/internal/i18n"
+)
 
 // KeyMap describes the keyboard bindings available in the TUI.
 // FullHelp returns the grouped bindings shown in the help card
@@ -27,6 +31,7 @@ type KeyMap struct {
 	StreamInfo    key.Binding
 	Doctor        key.Binding
 	History       key.Binding
+	Update        key.Binding
 	Help          key.Binding
 	Quit          key.Binding
 }
@@ -112,6 +117,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("H"),
 			key.WithHelp("H", "history"),
 		),
+		Update: key.NewBinding(
+			key.WithKeys("u"),
+			key.WithHelp("u", "update"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -123,11 +132,30 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
+// KeyMapFor keeps keyboard bindings language-neutral while translating the
+// descriptions shown in the full help card.
+func KeyMapFor(locale i18n.Locale) KeyMap {
+	k := DefaultKeyMap()
+	for _, item := range []struct {
+		binding *key.Binding
+		desc    string
+	}{
+		{&k.Up, "select"}, {&k.Down, "select"}, {&k.PlayPause, "play_pause"}, {&k.VolUp, "volume"}, {&k.VolDown, "volume"},
+		{&k.ThemeCycle, "themes"}, {&k.Mini, "app"}, {&k.AddStation, "add_station"}, {&k.Discovery, "discover"}, {&k.EditStation, "edit_station"},
+		{&k.DeleteStation, "delete"}, {&k.ShareStation, "share_station"}, {&k.SavePreview, "save_preview"}, {&k.ImportStation, "import"}, {&k.MixerOpen, "mixer"},
+		{&k.SettingsOpen, "settings"}, {&k.StreamInfo, "details"}, {&k.Doctor, "doctor_report"}, {&k.History, "history"}, {&k.Update, "update_title"}, {&k.Help, "help"}, {&k.Quit, "close"},
+	} {
+		h := item.binding.Help()
+		item.binding.SetHelp(h.Key, i18n.T(locale, item.desc))
+	}
+	return k
+}
+
 // FullHelp returns the bindings grouped by category for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.AddStation, k.Discovery, k.EditStation, k.DeleteStation, k.ShareStation, k.SavePreview, k.ImportStation, k.MixerOpen},
 		{k.PlayPause, k.VolUp, k.VolDown},
-		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Doctor, k.History, k.Help, k.Quit},
+		{k.ThemeCycle, k.SettingsOpen, k.Mini, k.StreamInfo, k.Doctor, k.History, k.Update, k.Help, k.Quit},
 	}
 }

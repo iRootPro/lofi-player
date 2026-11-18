@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 )
 
@@ -13,32 +14,36 @@ import (
 // copy. The original errors remain wrapped for callers and tests, but never
 // appear in the terminal interface.
 func discoveryErrorMessage(err error) string {
+	return discoveryErrorMessageFor(i18n.EN, err)
+}
+
+func discoveryErrorMessageFor(locale i18n.Locale, err error) string {
 	if err == nil {
 		return ""
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return "Radio Browser is taking too long. Try again."
+		return i18n.T(locale, "rb_slow")
 	}
 	var statusErr *radiobrowser.HTTPStatusError
 	if errors.As(err, &statusErr) {
 		switch {
 		case statusErr.StatusCode == http.StatusTooManyRequests:
-			return "Radio Browser is limiting requests. Try again shortly."
+			return i18n.T(locale, "rb_limited")
 		case statusErr.StatusCode >= http.StatusInternalServerError:
-			return "Radio Browser is temporarily unavailable. Try again later."
+			return i18n.T(locale, "rb_temporary")
 		default:
-			return "Radio Browser could not complete this search. Try again."
+			return i18n.T(locale, "rb_search_failed")
 		}
 	}
 	if errors.Is(err, radiobrowser.ErrInvalidResponse) {
-		return "Radio Browser sent an invalid response. Try again."
+		return i18n.T(locale, "rb_invalid")
 	}
 	var networkErr net.Error
 	if errors.As(err, &networkErr) {
 		if networkErr.Timeout() {
-			return "Radio Browser is taking too long. Try again."
+			return i18n.T(locale, "rb_slow")
 		}
-		return "Can't reach Radio Browser. Check your connection."
+		return i18n.T(locale, "rb_connection")
 	}
-	return "Radio Browser is unavailable. Try again later."
+	return i18n.T(locale, "rb_unavailable")
 }

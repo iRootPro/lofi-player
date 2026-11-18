@@ -15,6 +15,7 @@ import (
 	"github.com/iRootPro/lofi-player/internal/doctor"
 	listenhistory "github.com/iRootPro/lofi-player/internal/history"
 	"github.com/iRootPro/lofi-player/internal/theme"
+	"github.com/iRootPro/lofi-player/internal/updatecheck"
 )
 
 // fixture returns a Model wired up with a real config and a sized window,
@@ -560,6 +561,34 @@ func TestSettingsModalAdjustSaveAndCancel(t *testing.T) {
 	}
 }
 
+func TestSettingsLanguagePersistsAndAppliesOnSave(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := config.Defaults()
+	cfg.Language = "ru"
+	cfg.Stations = []config.Station{{Name: "A", URL: "http://a"}}
+	m := NewModel(&cfg, nil, audio.NewAmbientMixer(), Options{AutoplayStation: -1})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(Model)
+	m = send(t, m, "o")
+	if out := m.View(); !strings.Contains(out, "настройки") || !strings.Contains(out, "язык") {
+		t.Fatalf("Russian settings missing localized labels:\n%s", out)
+	} else if !strings.Contains(out, "±5s") || !strings.Contains(out, "0 выкл.") {
+		t.Fatalf("buffer rows must retain duration controls:\n%s", out)
+	}
+	m = send(t, m, "j", "j")
+	if out := m.View(); !strings.Contains(out, "сменить язык") || strings.Contains(out, "±5s") || strings.Contains(out, "0 выкл.") {
+		t.Fatalf("language row must explain language switching only:\n%s", out)
+	}
+	m = send(t, m, "h", "enter")
+	if cfg.Language != "en" || m.locale != "en" {
+		t.Fatalf("saved language = %q/%q, want en/en", cfg.Language, m.locale)
+	}
+	m = send(t, m, "o", "j", "j", "l", "esc")
+	if cfg.Language != "en" || m.locale != "en" {
+		t.Fatalf("escape changed language = %q/%q", cfg.Language, m.locale)
+	}
+}
+
 func TestUpdate_QuitReturnsTeaQuit(t *testing.T) {
 	m := fixture()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -690,6 +719,7 @@ func TestCommandKeyBindingsAreUnique(t *testing.T) {
 		{"stream info", km.StreamInfo.Keys()},
 		{"doctor", km.Doctor.Keys()},
 		{"history", km.History.Keys()},
+		{"update", km.Update.Keys()},
 		{"help", km.Help.Keys()},
 	}
 	seen := make(map[string]string)
@@ -707,6 +737,36 @@ func TestFullHelpExplainsSaveOnlyAppliesToPreview(t *testing.T) {
 	m := fixture()
 	if out := m.renderFullHelp(); !strings.Contains(out, "save preview") {
 		t.Fatalf("full help must qualify the contextual save shortcut:\n%s", out)
+	}
+}
+
+func TestUpdateNoticeAppearsWithoutStealingToast(t *testing.T) {
+	m := fixture()
+	m.toast = &Toast{Message: "playback warning", Kind: ToastError}
+	next, _ := m.Update(updateCheckResultMsg{result: updatecheck.Result{
+		LatestVersion: "v0.4.1",
+		ReleaseURL:    "https://github.com/iRootPro/lofi-player/releases/tag/v0.4.1",
+		Available:     true,
+	}})
+	m = next.(Model)
+	if m.toast == nil || m.toast.Message != "playback warning" {
+		t.Fatal("update notice replaced an existing toast")
+	}
+	if out := m.renderBottomHelp(120); !strings.Contains(out, "v0.4.1 available") {
+		t.Fatalf("update notice missing from footer: %q", out)
+	}
+	m = send(t, m, "u")
+	if m.mode != modeUpdate {
+		t.Fatalf("mode after u = %v, want update modal", m.mode)
+	}
+	for _, want := range []string{"update available", "brew upgrade iRootPro/tap/lofi-player", "v0.4.1"} {
+		if out := m.View(); !strings.Contains(out, want) {
+			t.Errorf("update modal missing %q:\n%s", want, out)
+		}
+	}
+	m = send(t, m, "esc")
+	if m.mode != modeFull {
+		t.Errorf("mode after update esc = %v, want full", m.mode)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	listenhistory "github.com/iRootPro/lofi-player/internal/history"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 )
 
 const historyCheckpointInterval = time.Minute
@@ -81,7 +82,7 @@ func (m Model) persistListeningHistory() (Model, tea.Cmd) {
 		// A history write must never interrupt playback. Preserve a more
 		// specific playback error if one is already visible.
 		if m.toast == nil {
-			m.toast = &Toast{Message: "Could not save listening history.", Kind: ToastError}
+			m.toast = &Toast{Message: m.t("history_save_failed"), Kind: ToastError}
 			return m, clearToastAfter()
 		}
 	}
@@ -106,7 +107,7 @@ func (m Model) updateHistory(msg tea.Msg) (Model, tea.Cmd) {
 			m.historyUI.confirmingClear = false
 			m, cmd := m.persistListeningHistory()
 			if m.toast == nil {
-				m.toast = &Toast{Message: "listening history cleared", Kind: ToastSuccess}
+				m.toast = &Toast{Message: m.t("history_cleared"), Kind: ToastSuccess}
 				return m, tea.Batch(cmd, clearToastAfter())
 			}
 			return m, cmd
@@ -143,7 +144,8 @@ func (m Model) viewHistory() string {
 		return m.viewHistoryClearConfirm(contentWidth)
 	}
 
-	from, to, label := historyPeriodBounds(m.historyUI.period, now)
+	from, to, _ := historyPeriodBounds(m.historyUI.period, now)
+	periodLabel := []string{m.t("today"), m.t("seven_days"), m.t("all_time")}[m.historyUI.period]
 	total := m.listeningHistory.DurationBetween(from, to, now)
 	sessions := m.historySessionCount(from, to, now)
 	top := m.historyTopStations(from, to, now)
@@ -153,23 +155,23 @@ func (m Model) viewHistory() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(m.styles.SectionHeader.Render("─── listening history ───"))
+	body.WriteString(m.styles.SectionHeader.Render(m.t("history")))
 	body.WriteString("\n\n")
-	body.WriteString(renderHistoryTabs(m.historyUI.period, m.styles))
+	body.WriteString(renderHistoryTabsFor(m.locale, m.historyUI.period, m.styles))
 	body.WriteString("\n")
-	body.WriteString(m.styles.HelpDesc.Render(fmt.Sprintf("%s  %s", label, formatHistoryDuration(total))))
-	body.WriteString(m.styles.Hint.Render(fmt.Sprintf("  ·  %d sessions", sessions)))
+	body.WriteString(m.styles.HelpDesc.Render(fmt.Sprintf("%s  %s", periodLabel, formatHistoryDuration(total))))
+	body.WriteString(m.styles.Hint.Render("  ·  " + m.t("sessions", sessions)))
 
 	if m.listeningHistory.Active != nil && !compact {
 		body.WriteString("\n")
 		active := m.listeningHistory.Active
-		body.WriteString(m.styles.Hint.Render("now playing  "))
+		body.WriteString(m.styles.Hint.Render(m.t("now_playing")))
 		body.WriteString(m.styles.StationName.Render(truncateRunes(active.StationName, max(4, contentWidth-16))))
 	}
 
 	if len(top) > 0 {
 		body.WriteString("\n\n")
-		body.WriteString(m.styles.HelpKey.Render("top stations"))
+		body.WriteString(m.styles.HelpKey.Render(m.t("top_stations")))
 		for i, station := range top {
 			body.WriteString("\n")
 			prefix := fmt.Sprintf("%d. ", i+1)
@@ -184,10 +186,10 @@ func (m Model) viewHistory() string {
 	recent := m.historyRecent(recentLimit)
 	if len(recent) > 0 {
 		body.WriteString("\n\n")
-		body.WriteString(m.styles.HelpKey.Render("recent"))
+		body.WriteString(m.styles.HelpKey.Render(m.t("recent")))
 		for _, session := range recent {
 			body.WriteString("\n")
-			when := formatHistoryWhen(session.EndedAt, now)
+			when := formatHistoryWhenFor(m.locale, session.EndedAt, now)
 			duration := formatHistoryDuration(time.Duration(session.PlayedSeconds) * time.Second)
 			prefix := when + "  "
 			nameWidth := max(4, contentWidth-lipgloss.Width(prefix)-lipgloss.Width(duration)-2)
@@ -199,15 +201,15 @@ func (m Model) viewHistory() string {
 
 	if len(top) == 0 && len(recent) == 0 && m.listeningHistory.Active == nil {
 		body.WriteString("\n\n")
-		body.WriteString(m.styles.Hint.Render("History appears after 30 seconds of confirmed playback."))
+		body.WriteString(m.styles.Hint.Render(m.t("history_empty")))
 	}
 
 	body.WriteString("\n\n")
-	body.WriteString(m.styles.HelpKey.Render("←/→") + " " + m.styles.HelpDesc.Render("period") + "  " +
+	body.WriteString(m.styles.HelpKey.Render("←/→") + " " + m.styles.HelpDesc.Render(m.t("period")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("C") + " " + m.styles.HelpDesc.Render("clear") + "  " +
+		m.styles.HelpKey.Render("C") + " " + m.styles.HelpDesc.Render(m.t("clear")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render("close"))
+		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render(m.t("close")))
 
 	card := lipgloss.NewStyle().
 		Width(contentWidth).
@@ -224,12 +226,12 @@ func (m Model) viewHistoryClearConfirm(contentWidth int) string {
 	dashboard := m
 	dashboard.historyUI.confirmingClear = false
 	backdrop := dashboard.viewHistory()
-	inner := m.styles.SectionHeader.Render("─── clear listening history? ───") + "\n\n" +
-		m.styles.HelpDesc.Render("This permanently removes local completed sessions.") + "\n" +
-		m.styles.Hint.Render("Current playback continues as a fresh session.") + "\n\n" +
-		m.styles.HelpKey.Render("y / enter") + " " + m.styles.HelpDesc.Render("clear") + "  " +
+	inner := m.styles.SectionHeader.Render(m.t("clear_history")) + "\n\n" +
+		m.styles.HelpDesc.Render(m.t("clear_history_body")) + "\n" +
+		m.styles.Hint.Render(m.t("clear_history_hint")) + "\n\n" +
+		m.styles.HelpKey.Render("y / enter") + " " + m.styles.HelpDesc.Render(m.t("clear")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render("cancel")
+		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render(m.t("cancel"))
 	card := lipgloss.NewStyle().
 		Width(contentWidth).
 		Border(lipgloss.RoundedBorder()).
@@ -253,7 +255,11 @@ func historyPeriodBounds(period historyPeriod, now time.Time) (time.Time, time.T
 }
 
 func renderHistoryTabs(active historyPeriod, styles Styles) string {
-	labels := []string{"today", "7 days", "all time"}
+	return renderHistoryTabsFor("en", active, styles)
+}
+
+func renderHistoryTabsFor(locale i18n.Locale, active historyPeriod, styles Styles) string {
+	labels := []string{i18n.T(locale, "today"), i18n.T(locale, "seven_days"), i18n.T(locale, "all_time")}
 	parts := make([]string, 0, len(labels))
 	for i, label := range labels {
 		if historyPeriod(i) == active {
@@ -368,10 +374,17 @@ func formatHistoryDuration(duration time.Duration) string {
 }
 
 func formatHistoryWhen(when, now time.Time) string {
+	return formatHistoryWhenFor("en", when, now)
+}
+
+func formatHistoryWhenFor(locale i18n.Locale, when, now time.Time) string {
 	localWhen := when.In(time.Local)
 	localNow := now.In(time.Local)
 	if localWhen.Year() == localNow.Year() && localWhen.YearDay() == localNow.YearDay() {
 		return localWhen.Format("15:04")
+	}
+	if locale == i18n.RU {
+		return localWhen.Format("02.01")
 	}
 	return localWhen.Format("Jan 02")
 }

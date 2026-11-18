@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,10 +19,12 @@ import (
 	"github.com/iRootPro/lofi-player/internal/config"
 	"github.com/iRootPro/lofi-player/internal/doctor"
 	listenhistory "github.com/iRootPro/lofi-player/internal/history"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/state"
 	"github.com/iRootPro/lofi-player/internal/tui"
+	"github.com/iRootPro/lofi-player/internal/updatecheck"
 )
 
 const mpvStartupTimeout = 5 * time.Second
@@ -31,12 +34,13 @@ const mpvStartupTimeout = 5 * time.Second
 var version = "dev"
 
 func main() {
+	locale := i18n.Resolve(config.LanguageChoice())
 	if len(os.Args) >= 2 && os.Args[1] == "doctor" {
 		if len(os.Args) > 2 {
-			fmt.Fprintln(os.Stderr, "usage: lofi-player doctor")
+			fmt.Fprintln(os.Stderr, i18n.T(locale, "usage_doctor"))
 			os.Exit(2)
 		}
-		if err := runDoctor(os.Stdout); err != nil {
+		if err := runDoctor(os.Stdout, locale); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
 			os.Exit(1)
 		}
@@ -46,20 +50,33 @@ func main() {
 	var (
 		statusline    bool
 		showVersion   bool
+		checkUpdate   bool
 		exportAll     bool
 		exportStation string
 		importPath    string
 	)
-	flag.BoolVar(&statusline, "statusline", false, "print one status-line snapshot to stdout and exit (no TUI)")
-	flag.BoolVar(&showVersion, "version", false, "print version and exit")
-	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand)")
-	flag.BoolVar(&exportAll, "export-all", false, "print all stations as a shareable YAML snippet and exit")
-	flag.StringVar(&exportStation, "export-station", "", "print one station by name as a shareable YAML snippet and exit")
-	flag.StringVar(&importPath, "import", "", "import stations from a YAML snippet file, or '-' for stdin, and exit")
+	flag.BoolVar(&statusline, "statusline", false, i18n.T(locale, "flag_statusline"))
+	flag.BoolVar(&showVersion, "version", false, i18n.T(locale, "flag_version"))
+	flag.BoolVar(&showVersion, "v", false, i18n.T(locale, "flag_version_short"))
+	flag.BoolVar(&checkUpdate, "check-update", false, i18n.T(locale, "flag_update"))
+	flag.BoolVar(&exportAll, "export-all", false, i18n.T(locale, "flag_export_all"))
+	flag.StringVar(&exportStation, "export-station", "", i18n.T(locale, "flag_export_station"))
+	flag.StringVar(&importPath, "import", "", i18n.T(locale, "flag_import"))
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "%s:\n", i18n.T(locale, "usage"))
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	if showVersion {
 		fmt.Println("lofi-player", version)
+		return
+	}
+	if checkUpdate {
+		if err := runCheckUpdate(os.Stdout, locale); err != nil {
+			fmt.Fprintf(os.Stderr, "lofi-player: %s\n", i18n.T(locale, "update_check_failed"))
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -72,7 +89,7 @@ func main() {
 	}
 
 	if exportAll || exportStation != "" {
-		if err := runExport(exportAll, exportStation); err != nil {
+		if err := runExport(exportAll, exportStation, locale); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
 			os.Exit(1)
 		}
@@ -80,7 +97,7 @@ func main() {
 	}
 
 	if importPath != "" {
-		if err := runImport(importPath); err != nil {
+		if err := runImport(importPath, locale); err != nil {
 			fmt.Fprintf(os.Stderr, "lofi-player: %v\n", err)
 			os.Exit(1)
 		}
@@ -98,10 +115,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	locale := i18n.Resolve(cfg.Language)
 
 	if _, err := exec.LookPath("mpv"); err != nil {
 		fmt.Fprint(os.Stderr, "\n", tui.RenderMissingDependency(
-			"mpv", "audio engine, required for all playback",
+			locale, "mpv", i18n.T(locale, "mpv_role"),
 			[]tui.InstallCmd{
 				{Platform: "macOS", Cmd: "brew install mpv"},
 				{Platform: "Linux", Cmd: "apt install mpv  ·  pacman -S mpv  ·  dnf install mpv"},
@@ -109,7 +127,7 @@ func run() error {
 		os.Exit(1)
 	}
 
-	youtubeWarning := preflightYouTube(cfg.Stations)
+	youtubeWarning := preflightYouTube(locale, cfg.Stations)
 
 	st := state.Load()
 	listeningHistory := listenhistory.Load()
@@ -134,6 +152,9 @@ func run() error {
 		ListeningHistory: listeningHistory,
 		SaveListeningHistory: func(h listenhistory.History) error {
 			return listenhistory.Save(h)
+		},
+		CheckForUpdate: func() (updatecheck.Result, error) {
+			return updatecheck.New(version).Check(context.Background())
 		},
 	}
 	effectiveVolume := cfg.Volume
@@ -209,18 +230,35 @@ func run() error {
 	return nil
 }
 
+func runCheckUpdate(out io.Writer, locale i18n.Locale) error {
+	result, err := updatecheck.New(version).CheckNow(context.Background())
+	if errors.Is(err, updatecheck.ErrNonReleaseBuild) {
+		_, writeErr := fmt.Fprintln(out, i18n.T(locale, "non_release"))
+		return writeErr
+	}
+	if err != nil {
+		return err
+	}
+	if result.Available {
+		_, err = fmt.Fprintln(out, i18n.T(locale, "available_cli", result.LatestVersion, result.ReleaseURL))
+		return err
+	}
+	_, err = fmt.Fprintln(out, i18n.T(locale, "up_to_date", version))
+	return err
+}
+
 // runDoctor prints a read-only diagnostic report without loading config,
 // starting mpv, or opening the TUI. Its timeout keeps it useful on blocked
 // DNS/VPN networks while allowing each check to observe cancellation.
-func runDoctor(out io.Writer) error {
+func runDoctor(out io.Writer, locale i18n.Locale) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
-	report := doctor.Collect(ctx, doctor.Options{ApplicationVersion: version})
+	report := doctor.Collect(ctx, doctor.Options{ApplicationVersion: version, Locale: locale})
 	_, err := fmt.Fprintln(out, report.String())
 	return err
 }
 
-func runExport(all bool, stationName string) error {
+func runExport(all bool, stationName string, locale i18n.Locale) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -231,7 +269,7 @@ func runExport(all bool, stationName string) error {
 	} else {
 		st, ok := findStationByName(cfg.Stations, stationName)
 		if !ok {
-			return fmt.Errorf("station %q not found", stationName)
+			return fmt.Errorf(i18n.T(locale, "station_not_found"), stationName)
 		}
 		snippet, err = sharepkg.MarshalStation(st)
 	}
@@ -242,7 +280,7 @@ func runExport(all bool, stationName string) error {
 	return nil
 }
 
-func runImport(path string) error {
+func runImport(path string, locale i18n.Locale) error {
 	var data []byte
 	var err error
 	if path == "-" {
@@ -264,14 +302,14 @@ func runImport(path string) error {
 	}
 	newStations, skipped := newStationsOnly(cfg.Stations, stations)
 	if len(newStations) == 0 {
-		fmt.Fprintf(os.Stderr, "lofi-player: all %d station(s) already exist\n", skipped)
+		fmt.Fprintf(os.Stderr, i18n.T(locale, "all_exist_cli"), skipped)
 		return nil
 	}
 	cfg.Stations = append(cfg.Stations, newStations...)
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "lofi-player: imported %d station(s), skipped %d duplicate(s)\n", len(newStations), skipped)
+	fmt.Fprintf(os.Stderr, i18n.T(locale, "imported_cli"), len(newStations), skipped)
 	return nil
 }
 
@@ -337,7 +375,7 @@ func runStatusline() error {
 // stations as unavailable and refuses to play them, but the rest of
 // the app keeps working — losing one source kind shouldn't sink the
 // whole player.
-func preflightYouTube(stations []config.Station) string {
+func preflightYouTube(locale i18n.Locale, stations []config.Station) string {
 	hasYouTube := false
 	for _, s := range stations {
 		if s.IsYouTube() {
@@ -349,7 +387,7 @@ func preflightYouTube(stations []config.Station) string {
 		return ""
 	}
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		return "yt-dlp not found — YouTube stations unavailable. install: brew install yt-dlp / pip install yt-dlp"
+		return i18n.T(locale, "youtube_missing") + ". install: brew install yt-dlp / pip install yt-dlp"
 	}
 	return ""
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -21,12 +22,12 @@ type InstallCmd struct {
 // result to stderr and exits — there is no event loop. The card
 // renders against the Tokyo Night palette since the user's chosen
 // theme is loaded later (and may not exist if config is broken).
-func RenderMissingDependency(name, role string, cmds []InstallCmd) string {
+func RenderMissingDependency(locale i18n.Locale, name, role string, cmds []InstallCmd) string {
 	t, _ := theme.Lookup("tokyo-night")
 	s := NewStyles(t)
 
 	title := s.AppTitle.Render(iconLogo+" lofi.player ") +
-		s.HelpDesc.Render("can't start")
+		s.HelpDesc.Render(i18n.T(locale, "cannot_start"))
 
 	missing := s.StationCursor.Render("✗ ") +
 		s.StationName.Render(name) +
@@ -40,7 +41,7 @@ func RenderMissingDependency(name, role string, cmds []InstallCmd) string {
 	}
 	lines = append(lines,
 		"",
-		s.HelpDesc.Render("Install and run lofi-player again."),
+		s.HelpDesc.Render(i18n.T(locale, "install_again")),
 	)
 
 	card := lipgloss.NewStyle().

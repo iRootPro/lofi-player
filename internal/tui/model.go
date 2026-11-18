@@ -10,8 +10,10 @@ import (
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	listenhistory "github.com/iRootPro/lofi-player/internal/history"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	"github.com/iRootPro/lofi-player/internal/theme"
+	"github.com/iRootPro/lofi-player/internal/updatecheck"
 )
 
 // Track is the currently-playing title + artist as reported by mpv's
@@ -69,6 +71,9 @@ type Options struct {
 	// SaveListeningHistory persists the history on lifecycle boundaries and
 	// checkpoints. The TUI keeps playback working when this callback fails.
 	SaveListeningHistory func(listenhistory.History) error
+	// CheckForUpdate runs after the TUI is visible. It must be bounded and
+	// return an error rather than surfacing network failures in the player UI.
+	CheckForUpdate func() (updatecheck.Result, error)
 }
 
 // viewMode chooses between full, mini, and modal layouts.
@@ -87,6 +92,7 @@ const (
 	modeDiscovery
 	modeDoctor
 	modeHistory
+	modeUpdate
 )
 
 // Model is the root Bubble Tea model.
@@ -101,6 +107,7 @@ type Model struct {
 	styles     Styles
 	keys       KeyMap
 	appVersion string
+	locale     i18n.Locale
 
 	cursor     int
 	playingIdx int
@@ -166,6 +173,9 @@ type Model struct {
 	// enough to preserve most of a long listen after an unexpected exit without
 	// putting disk I/O on the per-second rendering path.
 	historySavedAt time.Time
+
+	checkForUpdate func() (updatecheck.Result, error)
+	updateNotice   updateNoticeModel
 	// doctorCheckSeq is monotonic across modal sessions, so a canceled check
 	// from a prior open can never update a freshly opened Doctor.
 	doctorCheckSeq int
@@ -195,6 +205,7 @@ type Model struct {
 	settingsCursor               int
 	settingsBufferSeconds        int
 	settingsInitialBufferSeconds int
+	settingsLanguage             string
 
 	mixer   *audio.AmbientMixer
 	mixerUI mixerModel
@@ -307,7 +318,8 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		appVersion:       opts.AppVersion,
 		theme:            t,
 		styles:           NewStyles(t),
-		keys:             DefaultKeyMap(),
+		keys:             KeyMapFor(i18n.Resolve(cfg.Language)),
+		locale:           i18n.Resolve(cfg.Language),
 		cursor:           cursor,
 		playingIdx:       playingIdx,
 		playing:          playing,
@@ -326,6 +338,7 @@ func NewModel(cfg *config.Config, player *audio.Player, mixer *audio.AmbientMixe
 		discoveryClient:  opts.Discovery,
 		listeningHistory: opts.ListeningHistory,
 		saveHistory:      opts.SaveListeningHistory,
+		checkForUpdate:   opts.CheckForUpdate,
 		startupWarning:   opts.StartupWarning,
 		toast:            startupToast,
 	}
@@ -345,6 +358,9 @@ func (m Model) Init() tea.Cmd {
 		// in-app toasts; the user can also dismiss it implicitly by
 		// triggering any other toast (which replaces it).
 		cmds = append(cmds, clearToastAfter())
+	}
+	if m.checkForUpdate != nil {
+		cmds = append(cmds, checkForUpdateCmd(m.checkForUpdate))
 	}
 	return tea.Batch(cmds...)
 }

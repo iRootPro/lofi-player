@@ -27,6 +27,9 @@ import (
 
 // Config is the deserialized user configuration.
 type Config struct {
+	// Language is the persisted interface-language choice: auto, en, or ru.
+	// Empty legacy configs resolve as auto.
+	Language string `yaml:"language"`
 	// Theme names a built-in palette (see internal/theme).
 	Theme string `yaml:"theme"`
 	// Volume is the initial playback volume, 0–100.
@@ -83,6 +86,7 @@ func (s Station) IsYouTube() bool {
 // and was chosen for stability across networks and metadata correctness.
 func Defaults() Config {
 	return Config{
+		Language:             "auto",
 		Theme:                "tokyo-night",
 		Volume:               60,
 		BufferSeconds:        30,
@@ -94,6 +98,41 @@ func Defaults() Config {
 			{Name: "Radio Paradise Mellow", URL: "https://stream.radioparadise.com/mellow-128"},
 		},
 	}
+}
+
+// LanguageChoice reads only the language setting without creating, migrating,
+// or rewriting a configuration file. Standalone commands use it so that a
+// diagnostic command is always safe to run against an absent config.
+func LanguageChoice() string {
+	p, err := Path()
+	if err != nil {
+		return "auto"
+	}
+	if language, found := languageChoiceFromFile(p); found {
+		return language
+	}
+	// Read-only fallback for a pre-migration macOS install. Unlike Load, a
+	// standalone command must never move or create either configuration file.
+	if legacy := macOSLegacyPath(); legacy != "" && legacy != p {
+		if language, found := languageChoiceFromFile(legacy); found {
+			return language
+		}
+	}
+	return "auto"
+}
+
+func languageChoiceFromFile(path string) (string, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var raw struct {
+		Language string `yaml:"language"`
+	}
+	if yaml.Unmarshal(data, &raw) != nil {
+		return "", false
+	}
+	return raw.Language, true
 }
 
 // Path returns the canonical path to the config file. It honors

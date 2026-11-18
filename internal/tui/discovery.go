@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 )
 
@@ -77,9 +78,9 @@ func (d discoveryModel) setFocus(next discoveryFocus) discoveryModel {
 	return d
 }
 
-func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Color, playback discoveryPlayback, loadingIndicator string) string {
+func (d discoveryModel) view(locale i18n.Locale, width, height int, styles Styles, muted lipgloss.Color, playback discoveryPlayback, loadingIndicator string) string {
 	if d.details {
-		return d.detailsView(width, height, styles, muted)
+		return d.detailsViewFor(locale, width, height, styles, muted)
 	}
 
 	contentWidth := discoveryContentWidth(width)
@@ -91,35 +92,35 @@ func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Co
 	}
 
 	var body strings.Builder
-	body.WriteString(styles.SectionHeader.Render("─── discover radio ───"))
+	body.WriteString(styles.SectionHeader.Render(i18n.T(locale, "discover_radio")))
 	body.WriteString("\n\n")
-	body.WriteString(inputStyle.Render("search  "))
+	body.WriteString(inputStyle.Render(i18n.T(locale, "search")))
 	body.WriteString(input.View())
 	if playback.streamURL != "" {
 		body.WriteString("\n\n")
-		body.WriteString(renderDiscoveryPlayback(playback, loadingIndicator, styles))
+		body.WriteString(renderDiscoveryPlayback(locale, playback, loadingIndicator, styles))
 	}
 	if d.notice != "" {
 		body.WriteString("\n\n")
-		body.WriteString(renderDiscoveryNotice(d.notice, d.noticeKind, styles))
+		body.WriteString(renderDiscoveryNotice(locale, d.notice, d.noticeKind, styles))
 	}
 
 	if d.loading {
 		body.WriteString("\n\n")
-		body.WriteString(styles.Hint.Render("searching Radio Browser…"))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "searching")))
 	} else if d.err != "" {
 		body.WriteString("\n\n")
-		body.WriteString(styles.StationCursor.Render("error: "))
+		body.WriteString(styles.StationCursor.Render(i18n.T(locale, "error")))
 		body.WriteString(styles.HelpDesc.Render(d.err))
 	} else if d.cached {
 		body.WriteString("\n\n")
-		body.WriteString(styles.Hint.Render("cached results — Radio Browser is unavailable"))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "cached_results")))
 	} else if utf8.RuneCountInString(strings.TrimSpace(d.input.Value())) < discoveryMinQueryRunes {
 		body.WriteString("\n\n")
-		body.WriteString(styles.Hint.Render("type at least 2 characters; results appear automatically"))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "type_two")))
 	} else if len(d.results) == 0 {
 		body.WriteString("\n\n")
-		body.WriteString(styles.Hint.Render("no stations found"))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "no_stations")))
 	}
 
 	if len(d.results) > 0 {
@@ -152,7 +153,7 @@ func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Co
 			metaBudget := max(0, contentWidth-lipgloss.Width(prefix)-minNameWidth-lipgloss.Width("  "))
 			meta := discoveryRowMeta(station, metaBudget)
 			if active {
-				playbackMeta := discoveryRowPlaybackLabel(playback)
+				playbackMeta := discoveryRowPlaybackLabel(locale, playback)
 				metaBudget -= lipgloss.Width(playbackMeta)
 				if meta != "" {
 					metaBudget -= lipgloss.Width(" · ")
@@ -181,28 +182,28 @@ func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Co
 		}
 		if len(d.results) > limit {
 			body.WriteString("\n")
-			body.WriteString(styles.Hint.Render(fmt.Sprintf("%d more results", len(d.results)-limit)))
+			body.WriteString(styles.Hint.Render(i18n.T(locale, "more_results", len(d.results)-limit)))
 		}
 		if station, ok := d.selected(); ok {
 			body.WriteString("\n\n")
-			body.WriteString(renderDiscoverySummary(station, contentWidth, styles))
+			body.WriteString(renderDiscoverySummary(locale, station, contentWidth, styles))
 		}
 	}
 
 	body.WriteString("\n\n")
-	body.WriteString(styles.HelpKey.Render("↓") + " " + styles.HelpDesc.Render("results") + "  " +
+	body.WriteString(styles.HelpKey.Render("↓") + " " + styles.HelpDesc.Render(i18n.T(locale, "results")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("↑") + " " + styles.HelpDesc.Render("input") + "  " +
+		styles.HelpKey.Render("↑") + " " + styles.HelpDesc.Render(i18n.T(locale, "input")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("jk/↑↓") + " " + styles.HelpDesc.Render("select") + "  " +
+		styles.HelpKey.Render("jk/↑↓") + " " + styles.HelpDesc.Render(i18n.T(locale, "select")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("enter") + " " + styles.HelpDesc.Render("play") + "  " +
+		styles.HelpKey.Render("enter") + " " + styles.HelpDesc.Render(i18n.T(locale, "play")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("s") + " " + styles.HelpDesc.Render("save") + "  " +
+		styles.HelpKey.Render("s") + " " + styles.HelpDesc.Render(i18n.T(locale, "save")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("v") + " " + styles.HelpDesc.Render("details") + "  " +
+		styles.HelpKey.Render("v") + " " + styles.HelpDesc.Render(i18n.T(locale, "details")) + "  " +
 		styles.HelpSep.Render("·") + "  " +
-		styles.HelpKey.Render("esc") + " " + styles.HelpDesc.Render("close"))
+		styles.HelpKey.Render("esc") + " " + styles.HelpDesc.Render(i18n.T(locale, "close")))
 
 	card := lipgloss.NewStyle().
 		Width(contentWidth).
@@ -213,39 +214,38 @@ func (d discoveryModel) view(width, height int, styles Styles, muted lipgloss.Co
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, card)
 }
 
-func renderDiscoveryPlayback(playback discoveryPlayback, loadingIndicator string, styles Styles) string {
+func renderDiscoveryPlayback(locale i18n.Locale, playback discoveryPlayback, loadingIndicator string, styles Styles) string {
 	if playback.loading {
 		return styles.Cursor.Render(loadingIndicator) + "  " +
-			styles.StationName.Render("Loading "+truncateRunes(playback.stationName, 42)+"…") + "  " +
-			styles.Hint.Render("not saved")
+			styles.StationName.Render(i18n.T(locale, "loading_station", truncateRunes(playback.stationName, 42))) + "  " +
+			styles.Hint.Render(i18n.T(locale, "not_saved"))
 	}
 	if playback.playing {
 		return styles.StatusLive.Render(statusGlyphLive) + "  " +
-			styles.StationPlaying.Render("Playing "+truncateRunes(playback.stationName, 42)) + "  " +
-			styles.Hint.Render("not saved")
+			styles.StationPlaying.Render(i18n.T(locale, "playing_station", truncateRunes(playback.stationName, 42))) + "  " +
+			styles.Hint.Render(i18n.T(locale, "not_saved"))
 	}
-	return styles.HelpDesc.Render("Paused "+truncateRunes(playback.stationName, 42)) + "  " +
-		styles.Hint.Render("not saved")
+	return styles.HelpDesc.Render(truncateRunes(playback.stationName, 42)) + "  " + styles.Hint.Render(i18n.T(locale, "not_saved"))
 }
 
-func discoveryRowPlaybackLabel(playback discoveryPlayback) string {
+func discoveryRowPlaybackLabel(locale i18n.Locale, playback discoveryPlayback) string {
 	if playback.loading {
-		return "loading…"
+		return i18n.T(locale, "loading")
 	}
 	if playback.playing {
-		return "playing"
+		return i18n.T(locale, "playing")
 	}
-	return "paused"
+	return i18n.T(locale, "paused")
 }
 
-func renderDiscoveryNotice(message string, kind ToastKind, styles Styles) string {
+func renderDiscoveryNotice(locale i18n.Locale, message string, kind ToastKind, styles Styles) string {
 	switch kind {
 	case ToastSuccess:
-		return styles.StatusLive.Render("ok: ") + styles.StationPlaying.Render(message)
+		return styles.StatusLive.Render(i18n.T(locale, "success_label")) + styles.StationPlaying.Render(message)
 	case ToastError:
-		return styles.StationCursor.Render("error: ") + styles.HelpDesc.Render(message)
+		return styles.StationCursor.Render(i18n.T(locale, "error_label")) + styles.HelpDesc.Render(message)
 	default:
-		return styles.HelpKey.Render("note: ") + styles.HelpDesc.Render(message)
+		return styles.HelpKey.Render(i18n.T(locale, "note_label")) + styles.HelpDesc.Render(message)
 	}
 }
 
@@ -265,9 +265,9 @@ func discoveryContentWidth(width int) int {
 	return available
 }
 
-func renderDiscoverySummary(station radiobrowser.Station, width int, styles Styles) string {
+func renderDiscoverySummary(locale i18n.Locale, station radiobrowser.Station, width int, styles Styles) string {
 	var body strings.Builder
-	body.WriteString(styles.Hint.Render("selected  "))
+	body.WriteString(styles.Hint.Render(i18n.T(locale, "selected")))
 	body.WriteString(styles.StationName.Render(truncateRunes(station.Name, max(4, width-10))))
 	if meta := discoveryRowMeta(station, width); meta != "" {
 		body.WriteString("\n")
@@ -275,27 +275,31 @@ func renderDiscoverySummary(station radiobrowser.Station, width int, styles Styl
 	}
 	if station.Tags != "" {
 		body.WriteString("\n")
-		body.WriteString(styles.Hint.Render("tags  " + truncateRunes(station.Tags, max(4, width-6))))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "tags") + truncateRunes(station.Tags, max(4, width-6))))
 	}
 	body.WriteString("\n")
-	body.WriteString(styles.Hint.Render("press v for full details"))
+	body.WriteString(styles.Hint.Render(i18n.T(locale, "press_v")))
 	return body.String()
 }
 
 func (d discoveryModel) detailsView(width, height int, styles Styles, muted lipgloss.Color) string {
+	return d.detailsViewFor(i18n.EN, width, height, styles, muted)
+}
+
+func (d discoveryModel) detailsViewFor(locale i18n.Locale, width, height int, styles Styles, muted lipgloss.Color) string {
 	station, ok := d.selected()
 	if !ok {
 		return ""
 	}
 	contentWidth := discoveryContentWidth(width)
-	lines := discoveryDetailLines(station, contentWidth)
+	lines := discoveryDetailLinesFor(locale, station, contentWidth)
 	visible := discoveryDetailViewportRows(height)
 	maxScroll := max(0, len(lines)-visible)
 	scroll := min(d.detailScroll, maxScroll)
 	compact := discoveryDetailCompact(height)
 
 	var body strings.Builder
-	body.WriteString(styles.SectionHeader.Render("─── station details ───"))
+	body.WriteString(styles.SectionHeader.Render(i18n.T(locale, "station_details")))
 	if compact {
 		body.WriteByte('\n')
 	} else {
@@ -307,7 +311,7 @@ func (d discoveryModel) detailsView(width, height int, styles Styles, muted lipg
 		}
 		if i == 0 {
 			body.WriteString(styles.StationName.Render(lines[i]))
-		} else if strings.HasPrefix(lines[i], "tags  ") {
+		} else if strings.HasPrefix(lines[i], i18n.T(locale, "tags")) {
 			body.WriteString(styles.Hint.Render(lines[i]))
 		} else {
 			body.WriteString(styles.HelpDesc.Render(lines[i]))
@@ -315,16 +319,16 @@ func (d discoveryModel) detailsView(width, height int, styles Styles, muted lipg
 	}
 	if maxScroll > 0 && !compact {
 		body.WriteString("\n\n")
-		body.WriteString(styles.Hint.Render(fmt.Sprintf("%d–%d of %d lines", scroll+1, min(scroll+visible, len(lines)), len(lines))))
+		body.WriteString(styles.Hint.Render(i18n.T(locale, "lines_of", scroll+1, min(scroll+visible, len(lines)), len(lines))))
 	}
 	if compact {
 		body.WriteString("\n")
-		body.WriteString(styles.HelpKey.Render("esc") + " " + styles.HelpDesc.Render("back"))
+		body.WriteString(styles.HelpKey.Render("esc") + " " + styles.HelpDesc.Render(i18n.T(locale, "back")))
 	} else {
 		body.WriteString("\n\n")
-		body.WriteString(styles.HelpKey.Render("jk/↑↓") + " " + styles.HelpDesc.Render("scroll") + "  " +
+		body.WriteString(styles.HelpKey.Render("jk/↑↓") + " " + styles.HelpDesc.Render(i18n.T(locale, "scroll")) + "  " +
 			styles.HelpSep.Render("·") + "  " +
-			styles.HelpKey.Render("v / esc") + " " + styles.HelpDesc.Render("back"))
+			styles.HelpKey.Render("v / esc") + " " + styles.HelpDesc.Render(i18n.T(locale, "back")))
 	}
 
 	cardStyle := lipgloss.NewStyle().
@@ -341,6 +345,10 @@ func (d discoveryModel) detailsView(width, height int, styles Styles, muted lipg
 }
 
 func discoveryDetailLines(station radiobrowser.Station, width int) []string {
+	return discoveryDetailLinesFor(i18n.EN, station, width)
+}
+
+func discoveryDetailLinesFor(locale i18n.Locale, station radiobrowser.Station, width int) []string {
 	lines := wrapRunes(station.Name, width)
 	if meta := discoveryFullMeta(station); meta != "" {
 		lines = append(lines, wrapRunes(meta, width)...)
@@ -348,7 +356,7 @@ func discoveryDetailLines(station radiobrowser.Station, width int) []string {
 	if station.Tags != "" {
 		for i, line := range wrapRunes(station.Tags, max(4, width-6)) {
 			if i == 0 {
-				lines = append(lines, "tags  "+line)
+				lines = append(lines, i18n.T(locale, "tags")+line)
 			} else {
 				lines = append(lines, "      "+line)
 			}

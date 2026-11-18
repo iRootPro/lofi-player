@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/radiobrowser"
 	"gopkg.in/yaml.v3"
 )
@@ -62,6 +63,7 @@ type Snapshot struct {
 // optional function fields use their standard-library defaults.
 type Options struct {
 	ApplicationVersion string
+	Locale             i18n.Locale
 	ConfigPath         string
 	CacheDir           string
 	Snapshot           Snapshot
@@ -76,6 +78,7 @@ type Options struct {
 // Report is deliberately composed only of safe, human-readable data. It
 // never retains full station URLs, query strings, tokens, or raw errors.
 type Report struct {
+	Locale      i18n.Locale
 	Application string
 	Player      Check
 	Playback    Check
@@ -117,6 +120,7 @@ func NewReport(opts Options) Report {
 	}
 
 	return Report{
+		Locale:      opts.Locale,
 		Application: applicationVersion(opts.ApplicationVersion),
 		Player:      player,
 		Playback:    playback,
@@ -170,26 +174,95 @@ func Hostname(rawURL string) string {
 // config contents, or error values here: reports are intended for sharing.
 func (r Report) String() string {
 	return strings.Join([]string{
-		"lofi-player playback doctor",
-		"application: " + r.Application,
-		formatCheck("player", r.Player),
-		formatCheck("playback", r.Playback),
-		formatCheck("stream host", r.StreamHost),
-		formatCheck("discovery", r.Discovery),
-		formatCheck("last issue", r.LastIssue),
-		formatCheck("mpv", r.MPV),
-		formatCheck("yt-dlp", r.YTDLP),
-		formatCheck("config", r.Config),
-		formatCheck("Radio Browser DNS", r.DNS),
+		"lofi-player " + i18n.T(r.Locale, "doctor_report"),
+		i18n.T(r.Locale, "application") + ": " + r.Application,
+		formatCheckFor(r.Locale, i18n.T(r.Locale, "player"), r.Player),
+		formatCheckFor(r.Locale, i18n.T(r.Locale, "playback"), r.Playback),
+		formatCheckFor(r.Locale, i18n.T(r.Locale, "stream_host"), r.StreamHost),
+		formatCheckFor(r.Locale, diagnosticLabel(r.Locale, "discovery"), r.Discovery),
+		formatCheckFor(r.Locale, i18n.T(r.Locale, "last_issue"), r.LastIssue),
+		formatCheckFor(r.Locale, diagnosticLabel(r.Locale, "mpv"), r.MPV),
+		formatCheckFor(r.Locale, diagnosticLabel(r.Locale, "yt-dlp"), r.YTDLP),
+		formatCheckFor(r.Locale, diagnosticLabel(r.Locale, "config"), r.Config),
+		formatCheckFor(r.Locale, diagnosticLabel(r.Locale, "Radio Browser DNS"), r.DNS),
 	}, "\n")
 }
 
 func formatCheck(name string, check Check) string {
-	detail := sanitizeDetail(check.Detail)
+	return formatCheckFor(i18n.EN, name, check)
+}
+
+func formatCheckFor(locale i18n.Locale, name string, check Check) string {
+	detail := Localize(locale, sanitizeDetail(check.Detail))
 	if detail == "" {
 		detail = "not available"
 	}
-	return fmt.Sprintf("%s: %s — %s", name, check.Status, detail)
+	return fmt.Sprintf("%s: %s — %s", name, StatusLabel(locale, check.Status), detail)
+}
+
+// Localize translates only fixed diagnostic phrases produced by this package.
+// Values from mpv, DNS, or the network deliberately pass through unchanged.
+func Localize(locale i18n.Locale, detail string) string {
+	if locale != i18n.RU {
+		return detail
+	}
+	if value, ok := russianDiagnosticText[detail]; ok {
+		return value
+	}
+	if strings.HasPrefix(detail, "playing · buffer ") {
+		return strings.Replace(detail, "playing · buffer ", "воспроизводится · буфер ", 1)
+	}
+	if strings.HasPrefix(detail, "connected · ") {
+		return strings.Replace(detail, "connected · ", "подключён · ", 1)
+	}
+	replacements := strings.NewReplacer(
+		"not running (Doctor does not start playback)", "не запущен (диагностика не запускает воспроизведение)",
+		"connected; mpv check:", "подключён; проверка mpv:",
+		"not running; mpv", "не запущен; mpv",
+		"Radio Browser API check unavailable", "проверка API Radio Browser недоступна",
+		"Radio Browser API unreachable", "API Radio Browser недоступен",
+		"Radio Browser API returned an error", "API Radio Browser вернул ошибку",
+		"Radio Browser API reachable", "API Radio Browser доступен",
+		"1 cached search", "1 поиск в кеше",
+		"cached searches", "поисков в кеше",
+	)
+	return replacements.Replace(detail)
+}
+
+func diagnosticLabel(locale i18n.Locale, label string) string {
+	if locale != i18n.RU {
+		return label
+	}
+	switch label {
+	case "discovery":
+		return "поиск"
+	case "config":
+		return "конфигурация"
+	case "Radio Browser DNS":
+		return "DNS Radio Browser"
+	default:
+		return label
+	}
+}
+
+func StatusLabel(locale i18n.Locale, status Status) string {
+	if locale != i18n.RU {
+		return string(status)
+	}
+	switch status {
+	case StatusOK:
+		return "готово"
+	case StatusWarning:
+		return "предупреждение"
+	case StatusError:
+		return "ошибка"
+	default:
+		return "ожидание"
+	}
+}
+
+var russianDiagnosticText = map[string]string{
+	"not connected": "не подключён", "connected": "подключён", "not playing": "не воспроизводится", "loading": "загрузка", "playing": "воспроизводится", "paused": "на паузе", "buffering": "буферизация", "no active stream": "нет активного потока", "none": "нет", "checks not run": "проверки не запускались", "not available": "недоступно", "dependency check timed out": "проверка зависимости истекла по времени", "config check timed out": "проверка конфигурации истекла по времени", "cache check timed out": "проверка кеша истекла по времени", "path unavailable": "путь недоступен", "not created yet": "ещё не создан", "could not read": "не удалось прочитать", "not a regular file": "не обычный файл", "invalid YAML": "некорректный YAML", "readable YAML": "YAML читается", "Radio Browser name lookup failed": "не удалось найти имя Radio Browser", "Radio Browser host resolves": "хост Radio Browser разрешается", "no cached searches yet": "в кеше пока нет поисков", "cache unavailable": "кеш недоступен", "not found": "не найден", "not found (needed only for YouTube stations)": "не найден (нужен только для станций YouTube)", "found, but version check failed": "найден, но проверка версии не удалась", "version available": "версия доступна", "details redacted": "детали скрыты", "Could not play this station. Try another one.": "Не удалось воспроизвести эту станцию. Попробуйте другую.", "The stream ended.": "Поток завершился.", "A player command could not be completed.": "Команду плеера не удалось выполнить.",
 }
 
 func applicationVersion(version string) string {

@@ -5,6 +5,10 @@
 #
 # It is created with these defaults on first run if it doesn't exist.
 
+# Interface language: auto follows the system locale (ru* = Russian), or use
+# en / ru to override it. Station names and stream metadata are never changed.
+language: auto
+
 # Active color theme. Built-ins:
 # tokyo-night, catppuccin-mocha, gruvbox-dark, rose-pine,
 # catppuccin-latte, rose-pine-dawn, solarized-light, paper.

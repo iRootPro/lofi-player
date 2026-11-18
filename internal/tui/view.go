@@ -9,6 +9,7 @@ import (
 
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -102,6 +103,8 @@ func (m Model) View() string {
 		content = inner.viewDoctor()
 	case modeHistory:
 		content = inner.viewHistory()
+	case modeUpdate:
+		content = inner.viewUpdateNotice()
 	default:
 		content = inner.viewFull()
 	}
@@ -132,7 +135,7 @@ func (m Model) viewMixer() string {
 	} else {
 		backdrop = m.viewFull()
 	}
-	card := m.mixerUI.view(m.width, m.styles, m.theme)
+	card := m.mixerUI.viewFor(m.locale, m.width, m.styles, m.theme)
 	return overlayModal(backdrop, card)
 }
 
@@ -145,7 +148,7 @@ func (m Model) modalBackdrop() string {
 
 func (m Model) viewShareStation() string {
 	backdrop := m.modalBackdrop()
-	name := "station"
+	name := m.t("station")
 	if m.cursor >= 0 && m.cursor < len(m.cfg.Stations) {
 		name = m.cfg.Stations[m.cursor].Name
 	}
@@ -156,16 +159,16 @@ func (m Model) viewShareStation() string {
 	}
 	body := strings.Join(lines, "\n")
 	if body == "" {
-		body = m.styles.Hint.Render("nothing to share")
+		body = m.styles.Hint.Render(m.t("nothing_to_share"))
 	}
 
 	hint := m.styles.HelpKey.Render("enter") + " " +
-		m.styles.HelpDesc.Render("copy") + "  " +
+		m.styles.HelpDesc.Render(m.t("copy")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("esc") + " " +
-		m.styles.HelpDesc.Render("close")
+		m.styles.HelpDesc.Render(m.t("close"))
 
-	inner := m.styles.SectionHeader.Render("─── share station ───") +
+	inner := m.styles.SectionHeader.Render(m.t("share_station")) +
 		"\n\n" + m.styles.StationName.Render(name) +
 		"\n\n" + body
 	if m.toast != nil {
@@ -184,10 +187,6 @@ func (m Model) viewShareStation() string {
 func (m Model) viewImportStations() string {
 	backdrop := m.modalBackdrop()
 	count := len(m.importStations)
-	plural := "station"
-	if count != 1 {
-		plural = "stations"
-	}
 	var preview strings.Builder
 	limit := count
 	if limit > 5 {
@@ -203,21 +202,21 @@ func (m Model) viewImportStations() string {
 	}
 	if count > limit {
 		preview.WriteByte('\n')
-		preview.WriteString(m.styles.Hint.Render(fmt.Sprintf("…and %d more", count-limit)))
+		preview.WriteString(m.styles.Hint.Render(m.t("and_more", count-limit)))
 	}
 	if m.importSkipped > 0 {
 		preview.WriteByte('\n')
-		preview.WriteString(m.styles.Hint.Render(fmt.Sprintf("skipping %d duplicate(s)", m.importSkipped)))
+		preview.WriteString(m.styles.Hint.Render(m.t("skipping_duplicates", m.importSkipped)))
 	}
 
 	hint := m.styles.HelpKey.Render("enter") + " " +
-		m.styles.HelpDesc.Render("import") + "  " +
+		m.styles.HelpDesc.Render(m.t("import")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("esc") + " " +
-		m.styles.HelpDesc.Render("cancel")
+		m.styles.HelpDesc.Render(m.t("cancel"))
 
-	inner := m.styles.SectionHeader.Render("─── import stations ───") +
-		"\n\n" + m.styles.HelpDesc.Render(fmt.Sprintf("import %d %s?", count, plural)) +
+	inner := m.styles.SectionHeader.Render(m.t("import_stations")) +
+		"\n\n" + m.styles.HelpDesc.Render(m.t("import_count", count)) +
 		"\n\n" + preview.String() + "\n\n" + hint
 
 	card := lipgloss.NewStyle().
@@ -237,14 +236,19 @@ func (m Model) viewSettings() string {
 		desc  string
 	}{
 		{
-			label: "network buffer",
-			value: formatSettingsSeconds(m.settingsBufferSeconds, "mpv default"),
-			desc:  "audio kept ahead for unstable connections",
+			label: m.t("network_buffer"),
+			value: formatSettingsSeconds(m.settingsBufferSeconds, m.t("mpv_default")),
+			desc:  m.t("audio_ahead"),
 		},
 		{
-			label: "initial buffer",
-			value: formatSettingsSeconds(m.settingsInitialBufferSeconds, "off"),
-			desc:  "wait before start/resume, capped at 10s for live radio",
+			label: m.t("initial_buffer"),
+			value: formatSettingsSeconds(m.settingsInitialBufferSeconds, m.t("off")),
+			desc:  m.t("initial_buffer_desc"),
+		},
+		{
+			label: m.t("language"),
+			value: i18n.ChoiceLabel(m.locale, m.settingsLanguage),
+			desc:  m.t("language_system") + " / English / Русский",
 		},
 	}
 
@@ -277,27 +281,32 @@ func (m Model) viewSettings() string {
 	}
 	body.WriteString("\n\n")
 	if effective == 0 {
-		body.WriteString(m.styles.Hint.Render("effective read-ahead: mpv default"))
+		body.WriteString(m.styles.Hint.Render(m.t("effective_default")))
 	} else {
-		body.WriteString(m.styles.Hint.Render(fmt.Sprintf("effective read-ahead: %ds", effective)))
+		body.WriteString(m.styles.Hint.Render(m.t("effective_read_ahead", effective)))
 	}
 
+	adjustment := "±5s"
+	zeroHint := m.styles.HelpKey.Render("0") + " " +
+		m.styles.HelpDesc.Render(m.t("off")) + "  " +
+		m.styles.HelpSep.Render("·") + "  "
+	if m.settingsCursor == 2 {
+		adjustment = m.t("change_language")
+		zeroHint = ""
+	}
 	hint := m.styles.HelpKey.Render("↑↓/jk") + " " +
-		m.styles.HelpDesc.Render("select") + "  " +
+		m.styles.HelpDesc.Render(m.t("select")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("←→/hl") + " " +
-		m.styles.HelpDesc.Render("±5s") + "  " +
-		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("0") + " " +
-		m.styles.HelpDesc.Render("off") + "  " +
-		m.styles.HelpSep.Render("·") + "  " +
+		m.styles.HelpDesc.Render(adjustment) + "  " +
+		m.styles.HelpSep.Render("·") + "  " + zeroHint +
 		m.styles.HelpKey.Render("enter") + " " +
-		m.styles.HelpDesc.Render("save") + "  " +
+		m.styles.HelpDesc.Render(m.t("save")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("esc") + " " +
-		m.styles.HelpDesc.Render("cancel")
+		m.styles.HelpDesc.Render(m.t("cancel"))
 
-	inner := m.styles.SectionHeader.Render("─── settings ───") +
+	inner := m.styles.SectionHeader.Render("─── "+m.t("settings")+" ───") +
 		"\n\n" + body.String() + "\n\n" + hint
 
 	card := lipgloss.NewStyle().
@@ -355,15 +364,15 @@ func (m Model) viewThemePicker() string {
 	}
 
 	hint := m.styles.HelpKey.Render("↑↓/jk") + " " +
-		m.styles.HelpDesc.Render("preview") + "  " +
+		m.styles.HelpDesc.Render(m.t("preview")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("enter") + " " +
-		m.styles.HelpDesc.Render("select") + "  " +
+		m.styles.HelpDesc.Render(m.t("select")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("esc") + " " +
-		m.styles.HelpDesc.Render("cancel")
+		m.styles.HelpDesc.Render(m.t("cancel"))
 
-	inner := m.styles.SectionHeader.Render("─── themes ───") +
+	inner := m.styles.SectionHeader.Render(m.t("theme_picker")) +
 		"\n\n" + rows.String() + "\n\n" + hint
 
 	card := lipgloss.NewStyle().
@@ -385,14 +394,14 @@ func (m Model) viewConfirmDelete() string {
 		name = m.cfg.Stations[m.pendingDeleteIdx].Name
 	}
 
-	prompt := m.styles.HelpDesc.Render("delete ") +
+	prompt := m.styles.HelpDesc.Render(m.t("delete")) +
 		m.styles.StationName.Render(name) +
 		m.styles.HelpDesc.Render("?")
 	hint := m.styles.HelpKey.Render("y") + " " +
-		m.styles.HelpDesc.Render("confirm") + "  " +
+		m.styles.HelpDesc.Render(m.t("confirm")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
 		m.styles.HelpKey.Render("n / esc") + " " +
-		m.styles.HelpDesc.Render("cancel")
+		m.styles.HelpDesc.Render(m.t("cancel"))
 
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -410,7 +419,7 @@ func (m Model) viewConfirmDelete() string {
 func (m Model) viewAddStation() string {
 	// Render the previous layout as the backdrop.
 	backdrop := m.modalBackdrop()
-	form := m.addForm.view(m.width, m.styles, m.theme.Muted)
+	form := m.addForm.view(m.locale, m.width, m.styles, m.theme.Muted)
 	return overlayModal(backdrop, form)
 }
 
@@ -426,7 +435,7 @@ func (m Model) viewDiscovery() string {
 			playing:     m.playing,
 		}
 	}
-	return overlayModal(m.modalBackdrop(), m.discovery.view(m.width, m.height, m.styles, m.theme.Muted, playback, m.spinner.View()))
+	return overlayModal(m.modalBackdrop(), m.discovery.view(m.locale, m.width, m.height, m.styles, m.theme.Muted, playback, m.spinner.View()))
 }
 
 // overlayModal replaces the middle rows of the current screen with a
@@ -520,7 +529,7 @@ func (m Model) viewMini() string {
 func (m Model) renderNowPlaying() string {
 	station, ok := m.activeStation()
 	if !ok {
-		return leftPad + m.styles.Hint.Render("— no station selected —")
+		return leftPad + m.styles.Hint.Render(m.t("no_station"))
 	}
 
 	innerWidth := m.width - len(leftPad)*2
@@ -559,10 +568,10 @@ func (m Model) renderUnsavedDiscoveryHint() string {
 	return leftPad +
 		m.styles.HelpKey.Render("Radio Browser") +
 		m.styles.HelpSep.Render(" · ") +
-		m.styles.StationCursor.Render("not saved") +
+		m.styles.StationCursor.Render(m.t("not_saved")) +
 		m.styles.HelpSep.Render(" · ") +
 		m.styles.HelpKey.Render("s") + " " +
-		m.styles.HelpDesc.Render("save")
+		m.styles.HelpDesc.Render(m.t("save"))
 }
 
 // bufferBarCells / bufferFullSeconds / bufferLowSeconds /
@@ -768,7 +777,7 @@ func (m Model) formatTrack(maxWidth int) string {
 		// to start serving data, and a silent placeholder there is
 		// indistinguishable from a bug.
 		if m.loading {
-			return m.styles.Hint.Render("loading…")
+			return m.styles.Hint.Render(m.t("loading"))
 		}
 		return m.styles.Hint.Render("…")
 	}
@@ -968,25 +977,29 @@ func themeSwatch(name string) string {
 }
 
 func (m Model) renderBottomHelp(frameWidth int) string {
-	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render("help")
+	short := m.styles.AppTitle.Render("?") + " " + m.styles.HelpDesc.Render(m.t("help"))
+	if m.updateNotice.available() {
+		return m.styles.AppTitle.Render("u") + " " +
+			m.styles.HelpDesc.Render(m.t("update_available", m.updateNotice.latestVersion))
+	}
 
 	keyStyle := m.styles.AppTitle
 	libraryKeys := "c/p"
-	libraryAction := "share/import"
+	libraryAction := m.t("share_import")
 	if m.previewStation != nil {
 		libraryKeys = "s/p"
-		libraryAction = "save/paste"
+		libraryAction = m.t("save_paste")
 	}
 	parts := []string{
-		keyStyle.Render("space") + " " + m.styles.HelpDesc.Render("play/pause"),
-		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render("station"),
-		keyStyle.Render("/") + " " + m.styles.HelpDesc.Render("discover"),
-		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render("volume"),
+		keyStyle.Render("space") + " " + m.styles.HelpDesc.Render(m.t("play_pause")),
+		keyStyle.Render("↑↓") + " " + m.styles.HelpDesc.Render(m.t("station")),
+		keyStyle.Render("/") + " " + m.styles.HelpDesc.Render(m.t("discover")),
+		keyStyle.Render("+/-") + " " + m.styles.HelpDesc.Render(m.t("volume")),
 		keyStyle.Render(libraryKeys) + " " + m.styles.HelpDesc.Render(libraryAction),
-		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render("mixer"),
-		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render("themes"),
-		keyStyle.Render("o") + " " + m.styles.HelpDesc.Render("settings"),
-		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render("help"),
+		keyStyle.Render("x") + " " + m.styles.HelpDesc.Render(m.t("mixer")),
+		keyStyle.Render("t") + " " + m.styles.HelpDesc.Render(m.t("themes")),
+		keyStyle.Render("o") + " " + m.styles.HelpDesc.Render(m.t("settings")),
+		keyStyle.Render("?") + " " + m.styles.HelpDesc.Render(m.t("help")),
 	}
 	sep := m.styles.HelpSep.Render("  ·  ")
 	full := strings.Join(parts, sep)
@@ -1015,8 +1028,8 @@ func (m Model) stationRowWidth() int {
 func (m Model) renderStations() string {
 	if len(m.cfg.Stations) == 0 {
 		return leftPad + "    " +
-			m.styles.StationCursor.Render("press a") + " " +
-			m.styles.Hint.Render("to add one")
+			m.styles.StationCursor.Render(m.t("press_a")) + " " +
+			m.styles.Hint.Render(m.t("to_add_one"))
 	}
 
 	n := len(m.cfg.Stations)
@@ -1035,7 +1048,7 @@ func (m Model) renderStations() string {
 	var b strings.Builder
 	if start > 0 {
 		b.WriteString(leftPad + "    " +
-			m.styles.Hint.Render(fmt.Sprintf("↑ %d more", start)))
+			m.styles.Hint.Render(m.t("more_up", start)))
 		b.WriteString("\n")
 	}
 
@@ -1061,7 +1074,7 @@ func (m Model) renderStations() string {
 			suffix += "  " + badge
 		}
 		if unavailable {
-			suffix += "  " + m.styles.Hint.Render("unavailable")
+			suffix += "  " + m.styles.Hint.Render(m.t("unavailable"))
 		}
 
 		nameBudget := rowWidth - lipgloss.Width(cursor) - lipgloss.Width(marker) - 1 - lipgloss.Width(suffix)
@@ -1092,7 +1105,7 @@ func (m Model) renderStations() string {
 
 	if end < n {
 		b.WriteString(leftPad + "    " +
-			m.styles.Hint.Render(fmt.Sprintf("↓ %d more", n-end)))
+			m.styles.Hint.Render(m.t("more_down", n-end)))
 	}
 
 	return b.String()
@@ -1134,7 +1147,7 @@ func (m Model) renderTransientFooter() string {
 func (m Model) renderToast() string {
 	t := m.toast
 	out := leftPad
-	if label := t.label(); label != "" {
+	if label := t.label(m.locale); label != "" {
 		out += t.labelStyle(m.styles).Render(label)
 	}
 	return out + m.styles.HelpDesc.Render(t.Message)
@@ -1142,7 +1155,7 @@ func (m Model) renderToast() string {
 
 func (m Model) renderFullHelp() string {
 	groups := m.keys.FullHelp()
-	labels := []string{"navigation", "playback", "app"}
+	labels := []string{m.t("navigation"), m.t("playback"), m.t("app")}
 
 	// Three group columns sit side-by-side instead of stacking
 	// vertically, collapsing the card from ~22 rows to ~6.

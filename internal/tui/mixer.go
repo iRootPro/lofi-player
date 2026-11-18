@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/iRootPro/lofi-player/internal/audio"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
 
@@ -108,11 +109,15 @@ func (m mixerModel) setCmd(v int) tea.Cmd {
 const mixerBarWidth = 14
 
 func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
+	return m.viewFor(i18n.EN, width, styles, t)
+}
+
+func (m mixerModel) viewFor(locale i18n.Locale, width int, styles Styles, t theme.Theme) string {
 	if m.mixer == nil {
 		return ""
 	}
 	var inner strings.Builder
-	inner.WriteString(styles.SectionHeader.Render("ambient mixer"))
+	inner.WriteString(styles.SectionHeader.Render(i18n.T(locale, "ambient_mixer")))
 	inner.WriteString("\n")
 
 	ids := m.mixer.ChannelIDs()
@@ -122,10 +127,10 @@ func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
 		disabled := m.mixer.Disabled(id)
 		selected := ids[m.selected] == id
 		inner.WriteString("\n")
-		inner.WriteString(m.renderRow(ch, v, disabled, selected, styles))
+		inner.WriteString(m.renderRow(locale, ch, v, disabled, selected, styles))
 	}
 	inner.WriteString("\n\n")
-	inner.WriteString(m.renderHint(styles))
+	inner.WriteString(m.renderHint(locale, styles))
 
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -136,18 +141,18 @@ func (m mixerModel) view(width int, styles Styles, t theme.Theme) string {
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, card)
 }
 
-func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected bool, styles Styles) string {
+func (m mixerModel) renderRow(locale i18n.Locale, ch audio.AmbientChannel, v int, disabled, selected bool, styles Styles) string {
 	cursor := "  "
 	if selected {
 		cursor = styles.Cursor.Render("›") + " "
 	}
-	label := fmt.Sprintf("%-12s", ch.Label)
+	label := fmt.Sprintf("%-12s", i18n.T(locale, ch.ID))
 	// Icon picks up the brand Primary tone like the logo / volume / stations
 	// glyphs so the modal sits in the same visual family as the main view.
 	icon := styles.AppTitle.Render(ch.Icon)
 
 	if disabled {
-		return cursor + icon + "  " + styles.Hint.Render(label) + styles.Hint.Render("unavailable")
+		return cursor + icon + "  " + styles.Hint.Render(label) + styles.Hint.Render(i18n.T(locale, "unavailable"))
 	}
 
 	fill := v * mixerBarWidth / 100
@@ -168,13 +173,13 @@ func (m mixerModel) renderRow(ch audio.AmbientChannel, v int, disabled, selected
 	}
 }
 
-func (m mixerModel) renderHint(styles Styles) string {
+func (m mixerModel) renderHint(locale i18n.Locale, styles Styles) string {
 	pair := func(k, d string) string {
 		return styles.HelpKey.Render(k) + " " + styles.HelpDesc.Render(d)
 	}
 	sep := "  " + styles.HelpSep.Render("·") + "  "
-	return pair("j/k", "select") + sep +
+	return pair("j/k", i18n.T(locale, "select")) + sep +
 		pair("h/l", "±5") + sep +
-		pair("0", "mute") + sep +
-		pair("x", "close")
+		pair("0", i18n.T(locale, "mute")) + sep +
+		pair("x", i18n.T(locale, "close"))
 }

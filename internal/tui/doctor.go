@@ -53,7 +53,7 @@ func (m Model) updateDoctor(msg tea.Msg) (Model, tea.Cmd) {
 	case keyMsg.String() == "h":
 		host := doctor.Hostname(m.doctorSnapshot().StreamURL)
 		if host == "" {
-			m.toast = &Toast{Message: "No active stream hostname to copy.", Kind: ToastInfo}
+			m.toast = &Toast{Message: m.t("no_stream_host"), Kind: ToastInfo}
 			return m, clearToastAfter()
 		}
 		return m, copyDoctorCmd("host", host)
@@ -77,6 +77,7 @@ func (m Model) startDoctorChecks() (Model, tea.Cmd) {
 func (m Model) doctorOptions() doctor.Options {
 	return doctor.Options{
 		ApplicationVersion: m.appVersion,
+		Locale:             m.locale,
 		Snapshot:           m.doctorSnapshot(),
 	}
 }
@@ -134,12 +135,12 @@ func (m Model) viewDoctor() string {
 		label string
 		check doctor.Check
 	}{
-		{"application", doctor.Check{Status: doctor.StatusOK, Detail: report.Application}},
-		{"player", report.Player},
-		{"playback", report.Playback},
-		{"stream host", report.StreamHost},
-		{"discovery/cache", report.Discovery},
-		{"last issue", report.LastIssue},
+		{m.t("application"), doctor.Check{Status: doctor.StatusOK, Detail: report.Application}},
+		{m.t("player"), report.Player},
+		{m.t("playback"), report.Playback},
+		{m.t("stream_host"), report.StreamHost},
+		{m.t("discovery_cache"), report.Discovery},
+		{m.t("last_issue"), report.LastIssue},
 	}
 	var body strings.Builder
 	for _, row := range rows {
@@ -147,19 +148,19 @@ func (m Model) viewDoctor() string {
 		body.WriteByte('\n')
 	}
 	if m.doctor.checking {
-		body.WriteString(m.styles.HelpDesc.Render("Checking mpv, config, DNS, and Radio Browser…"))
+		body.WriteString(m.styles.HelpDesc.Render(m.t("checking")))
 		body.WriteByte('\n')
 	}
 
-	hint := m.styles.HelpKey.Render("c") + " " + m.styles.HelpDesc.Render("copy safe report") + "  " +
+	hint := m.styles.HelpKey.Render("c") + " " + m.styles.HelpDesc.Render(m.t("copy_report")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("h") + " " + m.styles.HelpDesc.Render("copy stream host") + "  " +
+		m.styles.HelpKey.Render("h") + " " + m.styles.HelpDesc.Render(m.t("copy_host")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("r") + " " + m.styles.HelpDesc.Render("run checks") + "  " +
+		m.styles.HelpKey.Render("r") + " " + m.styles.HelpDesc.Render(m.t("run_checks")) + "  " +
 		m.styles.HelpSep.Render("·") + "  " +
-		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render("close")
+		m.styles.HelpKey.Render("esc") + " " + m.styles.HelpDesc.Render(m.t("close"))
 
-	inner := m.styles.SectionHeader.Render("─── playback doctor ───") + "\n\n" + strings.TrimRight(body.String(), "\n")
+	inner := m.styles.SectionHeader.Render(m.t("doctor")) + "\n\n" + strings.TrimRight(body.String(), "\n")
 	if m.toast != nil {
 		inner += "\n\n" + m.renderToast()
 	}
@@ -187,5 +188,5 @@ func (m Model) renderDoctorRow(label string, check doctor.Check) string {
 		glyph = "×"
 		style = m.styles.StationCursor
 	}
-	return m.styles.StationItem.Render(fmt.Sprintf("%-16s", label)) + " " + style.Render(glyph+" "+string(check.Status)) + " " + m.styles.HelpDesc.Render(check.Detail)
+	return m.styles.StationItem.Render(fmt.Sprintf("%-16s", label)) + " " + style.Render(glyph+" "+doctor.StatusLabel(m.locale, check.Status)) + " " + m.styles.HelpDesc.Render(doctor.Localize(m.locale, check.Detail))
 }

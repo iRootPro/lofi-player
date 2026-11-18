@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/iRootPro/lofi-player/internal/audio"
 	"github.com/iRootPro/lofi-player/internal/config"
 	listenhistory "github.com/iRootPro/lofi-player/internal/history"
+	"github.com/iRootPro/lofi-player/internal/i18n"
 	sharepkg "github.com/iRootPro/lofi-player/internal/share"
 	"github.com/iRootPro/lofi-player/internal/theme"
 )
@@ -35,7 +35,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tick.seq == m.ambientSaveSeq && m.saveAmbient != nil && m.mixer != nil {
 			if err := m.saveAmbient(m.mixer.Volumes()); err != nil {
 				m.toast = &Toast{
-					Message: "Could not save ambient mixer settings.",
+					Message: m.t("save_mixer_failed"),
 					Kind:    ToastError,
 				}
 				return m, clearToastAfter()
@@ -71,14 +71,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streamInfo = audio.StreamInfoChanged{}
 		m.cacheSeconds = 0
 		m.playStartedAt = time.Time{}
-		m.toast = &Toast{Message: "reconnecting stream…", Kind: ToastInfo}
+		m.toast = &Toast{Message: m.t("reconnecting"), Kind: ToastInfo}
 		return m, tea.Batch(playCmd(m.player, station.URL, requestID), clearToastAfter())
 	case discoverySearchTickMsg:
 		if tick.session != m.discovery.session || tick.seq != m.discovery.searchSeq || tick.query != m.discovery.input.Value() || m.mode != modeDiscovery {
 			return m, nil
 		}
 		if m.discoveryClient == nil {
-			m.discovery.err = "Radio Browser is unavailable"
+			m.discovery.err = m.t("rb_unavailable")
 			return m, nil
 		}
 		m.discovery.loading = true
@@ -93,7 +93,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.discovery.results = nil
 			m.discovery.cursor = 0
 			m.discovery.cached = false
-			m.discovery.err = discoveryErrorMessage(tick.err)
+			m.discovery.err = discoveryErrorMessageFor(m.locale, tick.err)
 			return m, nil
 		}
 		m.discovery.results = tick.results.Stations
@@ -103,6 +103,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.discovery.cached = tick.results.Cached
 		m.discovery.err = ""
 		return m, nil
+	case updateCheckResultMsg:
+		if tick.err == nil && tick.result.Available {
+			m.updateNotice = updateNoticeModel{latestVersion: tick.result.LatestVersion, releaseURL: tick.result.ReleaseURL}
+		}
+		// Update checks are deliberately invisible when offline, rate-limited,
+		// or malformed. They must never compete with playback feedback.
+		return m, nil
 	case clearToastMsg:
 		m.toast = nil
 		return m, nil
@@ -110,12 +117,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tick.Err != nil {
 			// Keep the share modal open so the visible YAML remains available
 			// for manual copying when the host clipboard is unavailable.
-			m.toast = &Toast{Message: "Clipboard is unavailable. Copy the station text manually.", Kind: ToastError}
+			m.toast = &Toast{Message: m.t("copy_manual"), Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.mode = m.modePrev
 		m.shareSnippet = ""
-		m.toast = &Toast{Message: "station snippet copied", Kind: ToastSuccess}
+		m.toast = &Toast{Message: m.t("snippet_copied"), Kind: ToastSuccess}
 		return m, clearToastAfter()
 	case doctorCheckResultMsg:
 		if tick.seq != m.doctor.checkSeq {
@@ -127,21 +134,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case doctorCopiedMsg:
 		if tick.err != nil {
-			m.toast = &Toast{Message: "Clipboard is unavailable.", Kind: ToastError}
+			m.toast = &Toast{Message: m.t("clipboard_unavailable"), Kind: ToastError}
 		} else if tick.kind == "host" {
-			m.toast = &Toast{Message: "stream hostname copied", Kind: ToastSuccess}
+			m.toast = &Toast{Message: m.t("host_copied"), Kind: ToastSuccess}
 		} else {
-			m.toast = &Toast{Message: "safe doctor report copied", Kind: ToastSuccess}
+			m.toast = &Toast{Message: m.t("report_copied"), Kind: ToastSuccess}
 		}
 		return m, clearToastAfter()
 	case importClipboardMsg:
 		if tick.Err != nil {
-			m.toast = &Toast{Message: "Could not import stations. Check the copied station data.", Kind: ToastError}
+			m.toast = &Toast{Message: m.t("import_failed"), Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.importStations, m.importSkipped = m.newStationsOnly(tick.Stations)
 		if len(m.importStations) == 0 {
-			m.toast = &Toast{Message: "all pasted stations already exist", Kind: ToastInfo}
+			m.toast = &Toast{Message: m.t("already_exist"), Kind: ToastInfo}
 			return m, clearToastAfter()
 		}
 		m.modePrev = m.mode
@@ -178,6 +185,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeHistory {
 		return m.updateHistory(msg)
+	}
+	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeUpdate {
+		return m.updateUpdateNotice(msg)
 	}
 	if !isAudioEventMsg(msg) && !isGlobalModelMsg(msg) && m.mode == modeDiscovery {
 		return m.updateDiscovery(msg)
@@ -255,7 +265,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.RequestID != m.playRequestID {
 			return m, waitForEvent(m.player)
 		}
-		m.toast = &Toast{Message: "Could not play this station. Try another one.", Kind: ToastError}
+		m.toast = &Toast{Message: m.t("play_failed"), Kind: ToastError}
 		m.playing = false
 		m.loading = false
 		m.playingIdx = -1
@@ -267,7 +277,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bufferingStalled = false
 		m.reconnectSeq++
 		m.playStartedAt = time.Time{}
-		m.lastPlaybackIssue = "Could not play this station."
+		m.lastPlaybackIssue = "Could not play this station. Try another one."
 		m = m.endListening(m.historyNow(), listenhistory.EndError)
 		var persistCmd tea.Cmd
 		m, persistCmd = m.persistListeningHistory()
@@ -336,7 +346,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.playing && !m.loading && m.hasActiveStation() {
 				m.reconnectSeq++
 				seq := m.reconnectSeq
-				m.toast = &Toast{Message: "stream stalled — reconnecting if it does not recover", Kind: ToastInfo}
+				m.toast = &Toast{Message: m.t("stream_stalled"), Kind: ToastInfo}
 				return m, tea.Batch(waitForEvent(m.player), reconnectStreamAfter(seq), clearToastAfter(), persistCmd)
 			}
 			return m, tea.Batch(waitForEvent(m.player), persistCmd)
@@ -352,7 +362,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// playingIdx / streamInfo / playStartedAt the way
 		// PlaybackErrorMsg does.
 		m.toast = &Toast{
-			Message: "Could not " + msg.Action + ". Try again.",
+			Message: m.t("command_failed", m.localizedCommandAction(msg.Action)),
 			Kind:    ToastError,
 		}
 		m.lastPlaybackIssue = "A player command could not be completed."
@@ -381,6 +391,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, logoTick()
 	}
 	return m, nil
+}
+
+func (m Model) localizedCommandAction(action string) string {
+	switch action {
+	case "pause":
+		return m.t("pause")
+	case "resume":
+		return m.t("resume")
+	case "set volume":
+		return m.t("set_volume")
+	default:
+		if strings.HasPrefix(action, "set ") && strings.HasSuffix(action, " volume") {
+			id := strings.TrimSuffix(strings.TrimPrefix(action, "set "), " volume")
+			return m.t("set_volume") + " " + m.t(id)
+		}
+		return action
+	}
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -439,6 +466,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.History):
 		return m.openHistory(), nil
 
+	case key.Matches(msg, m.keys.Update):
+		if m.updateNotice.available() {
+			return m.openUpdateNotice(), nil
+		}
+		return m, nil
+
 	case key.Matches(msg, m.keys.EditStation):
 		if m.cursor < 0 || m.cursor >= len(m.cfg.Stations) {
 			return m, nil
@@ -463,7 +496,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		snippet, err := sharepkg.MarshalStation(m.cfg.Stations[m.cursor])
 		if err != nil {
-			m.toast = &Toast{Message: "Could not prepare this station for sharing.", Kind: ToastError}
+			m.toast = &Toast{Message: m.t("share_prepare_failed"), Kind: ToastError}
 			return m, clearToastAfter()
 		}
 		m.modePrev = m.mode
@@ -697,7 +730,7 @@ func (m Model) saveDiscoveredStation(name, streamURL string) (Model, string, Toa
 		}
 		m.cursor = i
 		m.promotePreviewIfMatches(i, streamURL)
-		return m, "Already in your library: " + existing.Name, ToastInfo
+		return m, m.t("already_library", existing.Name), ToastInfo
 	}
 
 	added := config.Station{Name: name, URL: streamURL, Kind: config.KindStream}
@@ -705,12 +738,12 @@ func (m Model) saveDiscoveredStation(name, streamURL string) (Model, string, Toa
 	candidate := *m.cfg
 	candidate.Stations = stations
 	if err := config.Save(&candidate); err != nil {
-		return m, "Could not save this station. Check your config directory permissions.", ToastError
+		return m, m.t("save_station_failed"), ToastError
 	}
 	m.cfg.Stations = stations
 	m.cursor = len(stations) - 1
 	m.promotePreviewIfMatches(m.cursor, added.URL)
-	return m, "Saved " + added.Name + " to your library.", ToastSuccess
+	return m, m.t("saved_library", added.Name), ToastSuccess
 }
 
 func (m *Model) promotePreviewIfMatches(idx int, streamURL string) {
@@ -727,7 +760,7 @@ func (m *Model) promotePreviewIfMatches(idx int, streamURL string) {
 // the user was editing an existing entry (in-place update), -1 means
 // appending a brand-new one.
 func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
-	form, result, stillOpen, cmd := m.addForm.update(msg)
+	form, result, stillOpen, cmd := m.addForm.update(m.locale, msg)
 	m.addForm = form
 	if stillOpen {
 		return m, cmd
@@ -753,14 +786,14 @@ func (m Model) updateAddStation(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: "Could not save your station changes. Check your config directory permissions.",
+			Message: m.t("changes_save_failed"),
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
 	}
 
 	m.toast = &Toast{
-		Message: verb + ": " + result.Station.Name,
+		Message: m.t(verb, result.Station.Name),
 		Kind:    ToastSuccess,
 	}
 	return m, clearToastAfter()
@@ -809,6 +842,7 @@ func (m Model) openSettings() Model {
 	m.settingsCursor = 0
 	m.settingsBufferSeconds = clampInt(m.cfg.BufferSeconds, 0, settingsMaxBufferSeconds)
 	m.settingsInitialBufferSeconds = clampInt(m.cfg.InitialBufferSeconds, 0, settingsMaxInitialSeconds)
+	m.settingsLanguage = string(i18n.Normalize(m.cfg.Language))
 	return m
 }
 
@@ -824,6 +858,15 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsBufferSeconds = clampInt(m.settingsBufferSeconds+delta, 0, settingsMaxBufferSeconds)
 		case 1:
 			m.settingsInitialBufferSeconds = clampInt(m.settingsInitialBufferSeconds+delta, 0, settingsMaxInitialSeconds)
+		case 2:
+			choices := []string{string(i18n.Auto), string(i18n.EN), string(i18n.RU)}
+			current := 0
+			for i, choice := range choices {
+				if choice == m.settingsLanguage {
+					current = i
+				}
+			}
+			m.settingsLanguage = choices[(current+delta/5+len(choices))%len(choices)]
 		}
 	}
 	zero := func() {
@@ -837,10 +880,10 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch km.String() {
 	case "up", "k":
-		m.settingsCursor = (m.settingsCursor + 1) % 2
+		m.settingsCursor = (m.settingsCursor + 2) % 3
 		return m, nil
 	case "down", "j":
-		m.settingsCursor = (m.settingsCursor + 1) % 2
+		m.settingsCursor = (m.settingsCursor + 1) % 3
 		return m, nil
 	case "left", "h", "-", "_":
 		adjust(-5)
@@ -852,14 +895,20 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 		zero()
 		return m, nil
 	case "enter":
-		m.cfg.BufferSeconds = m.settingsBufferSeconds
-		m.cfg.InitialBufferSeconds = m.settingsInitialBufferSeconds
-		m.mode = m.modePrev
-		if err := config.Save(m.cfg); err != nil {
-			m.toast = &Toast{Message: "Could not save settings. Check your config directory permissions.", Kind: ToastError}
+		candidate := *m.cfg
+		candidate.BufferSeconds = m.settingsBufferSeconds
+		candidate.InitialBufferSeconds = m.settingsInitialBufferSeconds
+		candidate.Language = m.settingsLanguage
+		if err := config.Save(&candidate); err != nil {
+			m.mode = m.modePrev
+			m.toast = &Toast{Message: m.t("save_settings_failed"), Kind: ToastError}
 			return m, clearToastAfter()
 		}
-		m.toast = &Toast{Message: "settings saved — restart to apply buffer changes", Kind: ToastSuccess}
+		*m.cfg = candidate
+		m.locale = m.effectiveLanguage()
+		m.keys = KeyMapFor(m.locale)
+		m.mode = m.modePrev
+		m.toast = &Toast{Message: m.t("settings_saved"), Kind: ToastSuccess}
 		return m, clearToastAfter()
 	case "esc":
 		m.mode = m.modePrev
@@ -918,7 +967,7 @@ func (m Model) updateThemePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.themeBeforePicker = ""
 		if m.saveTheme != nil {
 			if err := m.saveTheme(name); err != nil {
-				m.toast = &Toast{Message: "Could not save the selected theme.", Kind: ToastError}
+				m.toast = &Toast{Message: m.t("save_settings_failed"), Kind: ToastError}
 				return m, clearToastAfter()
 			}
 		}
@@ -971,16 +1020,13 @@ func (m Model) commitImport() (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: "Could not save imported stations. Check your config directory permissions.",
+			Message: m.t("import_save_failed"),
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()
 	}
 
-	msg := fmt.Sprintf("imported %d station", count)
-	if count != 1 {
-		msg += "s"
-	}
+	msg := m.t("imported", count)
 	m.toast = &Toast{Message: msg, Kind: ToastSuccess}
 	return m, clearToastAfter()
 }
@@ -1072,14 +1118,14 @@ func (m Model) commitDelete() (tea.Model, tea.Cmd) {
 
 	if err := config.Save(m.cfg); err != nil {
 		m.toast = &Toast{
-			Message: "Could not save the station removal. Check your config directory permissions.",
+			Message: m.t("removed_save_failed"),
 			Kind:    ToastError,
 		}
 		return m, tea.Batch(clearToastAfter(), cmd)
 	}
 
 	m.toast = &Toast{
-		Message: "deleted: " + deleted.Name,
+		Message: m.t("deleted", deleted.Name),
 		Kind:    ToastSuccess,
 	}
 	return m, tea.Batch(clearToastAfter(), cmd)
@@ -1124,7 +1170,7 @@ func (m Model) togglePlayPause() (tea.Model, tea.Cmd) {
 	// the user has to guess at the cause.
 	if !m.youtubeReady && m.cfg.Stations[m.cursor].IsYouTube() {
 		m.toast = &Toast{
-			Message: "yt-dlp not installed — install it to play YouTube stations",
+			Message: m.t("youtube_missing"),
 			Kind:    ToastError,
 		}
 		return m, clearToastAfter()

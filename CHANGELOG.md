@@ -3,6 +3,16 @@
 All notable user-facing changes are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-18
+
+### Added
+
+- Background update notices for stable release builds, plus
+  `--check-update` for a manual check. The check is cached, ETag-aware, and
+  never downloads or installs an update automatically.
+- English and Russian localization, with a persistent language choice in
+  Settings (`System`, `English`, or `Русский`).
+
 ## [0.4.0] - 2026-11-18
 
 ### Added
